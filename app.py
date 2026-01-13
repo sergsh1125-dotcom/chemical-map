@@ -120,7 +120,7 @@ def build_map(df):
 
         folium.Marker(
             [r.lat, r.lon],
-            icon=DivIcon(
+            icon=folium.features.DivIcon(
                 icon_size=(250,36),
                 icon_anchor=(0,-10),
                 html=label_html
