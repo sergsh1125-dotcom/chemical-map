@@ -3,8 +3,6 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 from fpdf import FPDF
-from datetime import datetime
-import io
 
 # ===============================
 # Налаштування сторінки
@@ -24,10 +22,12 @@ header {visibility: hidden;}
 """, unsafe_allow_html=True)
 
 # ===============================
-# Стан
+# СТАН
 # ===============================
 if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame()
+    st.session_state.data = pd.DataFrame(
+        columns=["lat", "lon", "value", "time"]
+    )
 
 if "substance" not in st.session_state:
     st.session_state.substance = "Хлор"
@@ -37,32 +37,118 @@ if "substance" not in st.session_state:
 # ===============================
 st.title("🧪 Карта хімічної обстановки")
 
-col1, col2 = st.columns([2, 1])
+col_map, col_gui = st.columns([2.2, 1])
 
-with col2:
+# ===============================
+# ПРАВА ПАНЕЛЬ — КЕРУВАННЯ
+# ===============================
+with col_gui:
     st.subheader("⚙️ Ввід даних")
 
     st.session_state.substance = st.text_input(
         "Назва небезпечної речовини",
-        value=st.session_state.substance
+        st.session_state.substance
     )
 
-    uploaded_file = st.file_uploader(
-        "Завантажити CSV (lat, lon, value, time)",
-        type=["csv"]
+    # --------- РУЧНИЙ ВВІД ----------
+    st.markdown("### ✍️ Додати точку вручну")
+
+    lat = st.number_input("Широта (lat)", format="%.6f")
+    lon = st.number_input("Довгота (lon)", format="%.6f")
+    value = st.number_input(
+        "Концентрація (мг/куб.м)",
+        min_value=0.0,
+        step=0.01
+    )
+    time = st.text_input(
+        "Час вимірювання",
+        placeholder="2026-01-09 12:30"
     )
 
-    if uploaded_file:
-        st.session_state.data = pd.read_csv(uploaded_file)
-        st.success(f"Завантажено {len(st.session_state.data)} точок")
-
-    if st.button("🧹 Очистити дані"):
-        st.session_state.data = pd.DataFrame()
+    if st.button("➕ Додати точку"):
+        new_row = {
+            "lat": lat,
+            "lon": lon,
+            "value": value,
+            "time": time
+        }
+        st.session_state.data = pd.concat(
+            [st.session_state.data, pd.DataFrame([new_row])],
+            ignore_index=True
+        )
 
     st.divider()
 
-    if not st.session_state.data.empty:
-        # ---------- HTML ----------
+    # --------- CSV ----------
+    uploaded = st.file_uploader(
+        "📂 Завантажити CSV",
+        type=["csv"]
+    )
+
+    if uploaded:
+        df = pd.read_csv(uploaded)
+        st.session_state.data = df
+        st.success(f"Завантажено {len(df)} точок")
+
+    if st.button("🧹 Очистити всі дані"):
+        st.session_state.data = st.session_state.data.iloc[0:0]
+
+    st.divider()
+
+# ===============================
+# КАРТА
+# ===============================
+with col_map:
+    if st.session_state.data.empty:
+        st.info("Немає даних для відображення")
+    else:
+        df = st.session_state.data.copy()
+
+        m = folium.Map(
+            location=[df.lat.mean(), df.lon.mean()],
+            zoom_start=13
+        )
+
+        for _, r in df.iterrows():
+            # 🟤 КОРИЧНЕВИЙ ТЕКСТ + МАРКЕР
+            label_html = f"""
+            <div style="
+                color: brown;
+                font-size: 13px;
+                font-weight: bold;
+                white-space: nowrap;
+                background-color: rgba(255,255,255,0.0);
+            ">
+                {st.session_state.substance} – {r['value']} мг/куб.м
+                <hr style="margin:2px 0;border:1px solid brown;">
+                {r['time']}
+            </div>
+            """
+
+            # КОРИЧНЕВА ТОЧКА
+            folium.CircleMarker(
+                [r.lat, r.lon],
+                radius=6,
+                color="brown",
+                fill=True,
+                fill_color="brown",
+                fill_opacity=0.9
+            ).add_to(m)
+
+            # ПІДПИС ПОРУЧ
+            folium.Marker(
+                [r.lat, r.lon],
+                icon=folium.DivIcon(
+                    icon_anchor=(0, -10),
+                    html=label_html
+                )
+            ).add_to(m)
+
+        st_folium(m, width=900, height=600, key="map")
+
+        # ===============================
+        # ЕКСПОРТ
+        # ===============================
         def export_html(map_obj):
             map_obj.save("chemical_map.html")
             with open("chemical_map.html", "rb") as f:
@@ -73,7 +159,6 @@ with col2:
                     mime="text/html"
                 )
 
-        # ---------- PDF ----------
         def export_pdf(df):
             pdf = FPDF()
             pdf.add_page()
@@ -84,13 +169,13 @@ with col2:
             pdf.ln(5)
 
             for _, r in df.iterrows():
-                line = (
+                text = (
                     f"{st.session_state.substance} – "
                     f"{r['value']} мг/куб.м\n"
-                    f"Дата: {r['time']}"
+                    f"{r['time']}"
                 )
-                pdf.multi_cell(0, 8, line)
-                pdf.ln(1)
+                pdf.multi_cell(0, 8, text)
+                pdf.ln(2)
 
             pdf.output("chemical_map.pdf")
 
@@ -102,42 +187,6 @@ with col2:
                     mime="application/pdf"
                 )
 
-# ===============================
-# Карта
-# ===============================
-with col1:
-    if st.session_state.data.empty:
-        st.info("Завантажте CSV для відображення карти")
-    else:
-        df = st.session_state.data.copy()
-
-        m = folium.Map(
-            location=[df.lat.mean(), df.lon.mean()],
-            zoom_start=13
-        )
-
-        for _, r in df.iterrows():
-            label_html = f"""
-            <div style="
-                background: rgba(255,255,255,0.0);
-                font-size: 12px;
-                white-space: nowrap;">
-                <b>{st.session_state.substance} – {r['value']} мг/куб.м</b><br>
-                <u>{r['time']}</u>
-            </div>
-            """
-
-            folium.Marker(
-                [r.lat, r.lon],
-                icon=folium.DivIcon(
-                    html=label_html
-                )
-            ).add_to(m)
-
-        # Карта НЕ мигає, бо ключ фіксований
-        st_folium(m, width=900, height=600, key="map")
-
-        # Кнопки експорту
         export_html(m)
         export_pdf(df)
 
