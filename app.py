@@ -118,14 +118,28 @@ def build_map(df):
         </div>
         """
 
-        folium.Marker(
-            [r.lat, r.lon],
-            icon=folium.features.DivIcon(
-                icon_size=(250,36),
-                icon_anchor=(0,-10),
-                html=label_html
-            )
-        ).add_to(m)
+       folium.Marker(
+    location=[lat, lon],
+    icon=folium.features.DivIcon(
+        icon_size=(220, 50),
+        icon_anchor=(0, 0),
+        html=f"""
+        <div style="
+            background: transparent;
+            color: black;
+            font-size: 12px;
+            font-weight: bold;
+            white-space: nowrap;
+        ">
+            {substance_name} – {concentration} мг/м³<br>
+            <span style="font-size:10px; text-decoration: underline;">
+                {measurement_time}
+            </span>
+        </div>
+        """
+    )
+).add_to(m)
+
 
     # Легенда
     legend_html = """
