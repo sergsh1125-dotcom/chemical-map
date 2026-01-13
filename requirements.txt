@@ -1,7 +1,6 @@
 streamlit
-pandas
 folium
 streamlit-folium
-fpdf
+pandas
 branca
 
