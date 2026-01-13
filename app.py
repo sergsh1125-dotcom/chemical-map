@@ -111,18 +111,17 @@ else:
 
     for _, r in df.iterrows():
         label_html = f"""
-        <div style="
-            color: brown;
-            font-size: 14px;
-            font-weight: bold;
-            white-space: nowrap;
-        ">
-            {st.session_state.substance} – {r['value']} мг/куб.м
-            <hr style="margin:2px 0;border:1px solid brown;">
-            {r['time']}
-        </div>
-        """
-
+<div style="
+    color: brown;
+    font-size: 14px;
+    font-weight: bold;
+    white-space: nowrap;
+">
+    {st.session_state.substance} – {r['value']:.2f} мг/куб.м
+    <hr style="margin:2px 0;border:1px solid brown;">
+    {r['time']}
+</div>
+"""
         folium.CircleMarker(
             [r.lat, r.lon],
             radius=7,
