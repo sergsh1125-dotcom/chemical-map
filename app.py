@@ -5,9 +5,10 @@ import pandas as pd
 from datetime import datetime
 from fpdf import FPDF
 import io
+import os
 
 # ===============================
-# Сторінка
+# Налаштування сторінки
 # ===============================
 st.set_page_config(
     page_title="Хімічна обстановка",
@@ -16,14 +17,13 @@ st.set_page_config(
 )
 
 # Приховати стандартні кнопки Streamlit
-hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            </style>
-            """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+st.markdown("""
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
 
 st.title("🧪 Карта хімічної обстановки")
 
@@ -34,38 +34,16 @@ if "data" not in st.session_state:
     st.session_state.data = []
 
 # ===============================
-# Сайдбар для ручного введення
+# Sidebar GUI
 # ===============================
 with st.sidebar:
-    st.header("➕ Додати точку вимірювання")
+    st.header("➕ Додати точку")
 
-    substance = st.text_input(
-        "Назва небезпечної речовини",
-        value="Хлор"
-    )
-
-    lat = st.number_input(
-        "Широта (lat)",
-        format="%.6f",
-        value=50.4501
-    )
-
-    lon = st.number_input(
-        "Довгота (lon)",
-        format="%.6f",
-        value=30.5234
-    )
-
-    concentration = st.number_input(
-        "Концентрація, мг/м³",
-        min_value=0.0,
-        format="%.3f"
-    )
-
-    time_meas = st.text_input(
-        "Час вимірювання",
-        value=datetime.now().strftime("%Y-%m-%d %H:%M")
-    )
+    substance = st.text_input("Назва речовини", value="Хлор")
+    lat = st.number_input("Широта (lat)", value=50.4501, format="%.6f")
+    lon = st.number_input("Довгота (lon)", value=30.5234, format="%.6f")
+    concentration = st.number_input("Концентрація, мг/м³", min_value=0.0, format="%.3f")
+    time_meas = st.text_input("Час вимірювання", value=datetime.now().strftime("%Y-%m-%d %H:%M"))
 
     if st.button("➕ Додати точку"):
         st.session_state.data.append({
@@ -81,31 +59,38 @@ with st.sidebar:
         st.session_state.data = []
         st.warning("Дані очищено")
 
-    st.subheader("📂 Завантажити CSV")
-    uploaded_file = st.file_uploader("CSV файл (lat, lon, value, time)", type="csv")
+    # -------------------------------
+    # Завантаження CSV
+    uploaded_file = st.file_uploader("📂 Завантажити CSV", type="csv")
     if uploaded_file:
         df_csv = pd.read_csv(uploaded_file)
         df_csv[['lat','lon','value']] = df_csv[['lat','lon','value']].apply(pd.to_numeric, errors="coerce")
         df_csv = df_csv.dropna()
+        new_points = []
         for _, r in df_csv.iterrows():
-            st.session_state.data.append({
+            new_points.append({
                 "substance": substance,
                 "lat": r.lat,
                 "lon": r.lon,
                 "concentration": r.value,
                 "time": r.time
             })
+        st.session_state.data.extend(new_points)
         st.success(f"Завантажено {len(df_csv)} точок")
 
+    # -------------------------------
     st.subheader("💾 Експорт")
     if st.button("Зберегти карту в HTML"):
         if st.session_state.data:
             df_export = pd.DataFrame(st.session_state.data)
-            # Створюємо карту
             m = folium.Map(location=[df_export.lat.mean(), df_export.lon.mean()], zoom_start=13)
             for _, r in df_export.iterrows():
-                folium.CircleMarker([r.lat, r.lon], radius=7,
-                                    color="black", fill=True, fill_color="red", fill_opacity=0.8).add_to(m)
+                folium.CircleMarker([r.lat, r.lon],
+                                    radius=7,
+                                    color="black",
+                                    fill=True,
+                                    fill_color="red",
+                                    fill_opacity=0.8).add_to(m)
                 folium.Marker([r.lat, r.lon],
                               icon=folium.features.DivIcon(
                                   icon_size=(260, 60),
@@ -121,15 +106,23 @@ with st.sidebar:
         if st.session_state.data:
             pdf = FPDF()
             pdf.add_page()
-            pdf.set_font("Arial", "B", 16)
+            # Підключення Unicode-шрифту DejaVu
+            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+            if os.path.exists(font_path):
+                pdf.add_font("DejaVu", "", font_path, uni=True)
+                pdf.set_font("DejaVu", "B", 16)
+            else:
+                pdf.set_font("Arial", "B", 16)  # fallback
             pdf.cell(0, 10, "Хімічна обстановка", ln=True, align="C")
             pdf.ln(10)
-            pdf.set_font("Arial", "", 12)
-            pdf.cell(40, 8, "Substance", 1)
-            pdf.cell(30, 8, "Lat", 1)
-            pdf.cell(30, 8, "Lon", 1)
-            pdf.cell(40, 8, "Concentration", 1)
-            pdf.cell(50, 8, "Time", 1)
+
+            # Таблиця
+            pdf.set_font("DejaVu" if os.path.exists(font_path) else "Arial", "", 12)
+            pdf.cell(40,8,"Речовина",1)
+            pdf.cell(30,8,"Lat",1)
+            pdf.cell(30,8,"Lon",1)
+            pdf.cell(40,8,"Концентрація",1)
+            pdf.cell(50,8,"Час",1)
             pdf.ln()
             for r in st.session_state.data:
                 pdf.cell(40,8,str(r['substance']),1)
@@ -156,12 +149,14 @@ def build_map(data):
     fg = folium.FeatureGroup(name="Точки вимірювання")
 
     for _, r in df.iterrows():
+        # Кольори маркерів
         color = "green"
         if r['concentration'] >= 1:
             color = "red"
         elif r['concentration'] >= 0.5:
             color = "orange"
 
+        # Круглий маркер
         folium.CircleMarker([r['lat'], r['lon']],
                             radius=7,
                             color="black",
@@ -170,6 +165,7 @@ def build_map(data):
                             fill_color=color,
                             fill_opacity=0.8).add_to(fg)
 
+        # Підпис біля точки
         folium.Marker([r['lat'], r['lon']],
                       icon=folium.features.DivIcon(
                           icon_size=(260, 60),
