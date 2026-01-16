@@ -44,10 +44,10 @@ if st.session_state.show_instructions:
     st.success("""
 **Порядок роботи з хімічною картою:**
 1. **Назва речовини:** Вказуйте назву (Хлор, Аміак тощо) при ручному введенні. 
-2. **Ручне введення:** Заповніть координати, концентрацію та час. Натисніть "Додати на карту".
+2. **Ручне введення:** Заповніть координати, концентрацію (до 5 знаків) та час. Натисніть "Додати на карту".
 3. **Завантаження файлу:** Виберіть CSV (стовпці: `lat`, `lon`, `substance`, `value`, `time`).
-4. **Запобіжник:** Якщо на карті вже є дані, програма запропонує або об'єднати їх з новими, або повністю замінити.
-5. **Візуалізація:** Всі точки та підписи відображаються **синім кольором** без зайвих рамок.
+4. **Шари за датами:** Програма автоматично групує дані по днях. Ви зможете вмикати/вимикати різні дати у меню на карті.
+5. **Запобіжник:** Якщо на карті вже є дані, система запропонує об'єднати їх або замінити.
 """)
 
 # ===============================
@@ -67,8 +67,14 @@ with col_gui:
     lat = st.number_input("Широта (lat)", format="%.6f", value=50.4501)
     lon = st.number_input("Довгота (lon)", format="%.6f", value=30.5234)
     
-    value = st.number_input("Концентрація (мг/м³)", min_value=0.0, step=0.01, format="%.2f")
-    time = st.text_input("Час вимірювання", placeholder="14:00")
+    # Концентрація з точністю 5 знаків
+    value = st.number_input(
+        "Концентрація (мг/м³)", 
+        min_value=0.0, 
+        step=0.00001, 
+        format="%.5f"
+    )
+    time = st.text_input("Час вимірювання", placeholder="2026-01-16 14:00")
 
     if st.button("➕ Додати на карту", use_container_width=True):
         new_row = pd.DataFrame([{"lat": lat, "lon": lon, "substance": substance, "value": value, "time": time}])
@@ -110,40 +116,64 @@ with col_gui:
         st.rerun()
 
 # ===============================
-# Візуалізація на карті
+# Візуалізація на карті (з шарами)
 # ===============================
 with col_map:
     if st.session_state.data.empty:
         st.info("Чекаю на дані для відображення хімічної обстановки...")
     else:
         df = st.session_state.data.copy()
+        
+        # Намагаємося витягнути дату для групування шарів
+        try:
+            df['day'] = pd.to_datetime(df['time']).dt.date
+        except:
+            df['day'] = "Поточна дата" # Якщо формат часу не дозволяє розпізнати день
+
         m = folium.Map(location=[df.lat.mean(), df.lon.mean()], zoom_start=11, control_scale=True)
+        
+        unique_days = sorted(df['day'].unique())
 
-        for _, r in df.iterrows():
-            # Синій напис без фонових полів
-            label_text = f"{r['substance']}: {r['value']} мг/м³ | {r['time']}"
-            
-            folium.map.Marker(
-                [r.lat, r.lon],
-                icon=folium.DivIcon(
-                    icon_anchor=(-15, 7),
-                    html=f"""<div style="font-family: sans-serif; font-size: 11pt; color: blue; font-weight: bold; white-space: nowrap;">{label_text}</div>"""
-                )
-            ).add_to(m)
-            
-            # Синя точка (хімічна небезпека)
-            folium.CircleMarker(
-                [r.lat, r.lon],
-                radius=7,
-                color="blue",
-                fill=True,
-                fill_color="blue",
-                fill_opacity=0.8
-            ).add_to(m)
+        for day in unique_days:
+            # Створюємо окремий шар для кожного дня
+            layer = folium.FeatureGroup(name=f"📅 Дата: {day}")
+            day_data = df[df['day'] == day]
 
-        st_folium(m, width="100%", height=650, key="chem_map")
+            for _, r in day_data.iterrows():
+                # Напис синім кольором із точністю 5 знаків
+                label_text = f"{r['substance']}: {r['value']:.5f} мг/м³ | {r['time']}"
+                
+                folium.map.Marker(
+                    [r.lat, r.lon],
+                    icon=folium.DivIcon(
+                        icon_anchor=(-15, 7),
+                        html=f"""<div style="font-family: sans-serif; font-size: 11pt; color: blue; font-weight: bold; white-space: nowrap;">{label_text}</div>"""
+                    )
+                ).add_to(layer)
+                
+                folium.CircleMarker(
+                    [r.lat, r.lon],
+                    radius=7,
+                    color="blue",
+                    fill=True,
+                    fill_color="blue",
+                    fill_opacity=0.8
+                ).add_to(layer)
+            
+            # Додаємо шар на карту
+            layer.add_to(m)
+
+        # Додаємо контроль шарів
+        folium.LayerControl(collapsed=False).add_to(m)
+
+        st_folium(m, width="100%", height=650, key="chem_map_layers")
 
         # Експорт у HTML
         m.save("chemical_map.html")
         with open("chemical_map.html", "rb") as f:
-            st.download_button("💾 Завантажити хімічну карту (HTML)", f, file_name="chemical_map.html", use_container_width=True)
+            st.download_button(
+                "💾 Завантажити хімічну карту (HTML)", 
+                f, 
+                file_name="chemical_map.html", 
+                use_container_width=True
+            )
