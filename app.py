@@ -30,12 +30,33 @@ if "clicked_coords" not in st.session_state:
 # ===============================
 def marker_html(main, sub):
     return f"""
-    <div style="display:inline-block; text-align:center; font-family:Arial; font-size:10pt; color:red; font-weight:bold;
-                text-shadow: -1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff;">
-        <div style="border-bottom:2px solid red; display:inline-block; padding-bottom:2px; margin-bottom:2px;">
+    <div style="
+        display: inline-block;
+        font-family: Arial;
+        font-size: 10pt;
+        color: blue;
+        font-weight: bold;
+        text-align: center;
+        white-space: nowrap;
+        background-color: transparent;
+        text-shadow:
+            -1px -1px 0 #fff,
+             1px -1px 0 #fff,
+            -1px  1px 0 #fff,
+             1px  1px 0 #fff,
+             2px  2px 3px rgba(255,255,255,0.9);
+    ">
+        <div style="
+            border-bottom: 2px solid blue;
+            display: inline-block;
+            padding-bottom: 2px;
+            margin-bottom: 2px;
+        ">
             {main}
         </div>
-        <div style="font-weight:normal;">{sub}</div>
+        <div style="font-weight: normal;">
+            {sub}
+        </div>
     </div>
     """
 
