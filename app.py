@@ -96,11 +96,13 @@ def create_map(df, lat, lon, zoom):
                 sub = r['time']
 
                 folium.CircleMarker(
-                    [r.lat, r.lon],
-                    radius=6,
-                    color="red",
-                    fill=True
-                ).add_to(group)
+    [r.lat, r.lon],
+    radius=6,
+    color="orange",
+    fill=True,
+    fill_color="orange",
+    fill_opacity=1
+).add_to(group)
 
                 folium.Marker(
                     [r.lat, r.lon],
