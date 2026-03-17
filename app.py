@@ -108,12 +108,32 @@ with col_map:
     m = folium.Map(location=[m_lat, m_lon], zoom_start=10, tiles='OpenStreetMap', control_scale=True)
 
     # Додаємо супутник як ОПЦІОНАЛЬНИЙ шар (overlay=False робить його перемикачем)
-    folium.TileLayer(
-        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        attr='Google Satellite',
-        name='Супутник',
-        overlay=False
-    ).add_to(m)
+   # Базова карта (звичайна)
+m = folium.Map(
+    location=[m_lat, m_lon],
+    zoom_start=10,
+    tiles=None,  # ВАЖЛИВО: відключаємо автозавантаження
+    control_scale=True
+)
+
+# Основна карта (буде за замовчуванням)
+folium.TileLayer(
+    'OpenStreetMap',
+    name='Стандартна карта',
+    overlay=False,
+    control=True,
+    show=True  # <-- ГАРАНТУЄ, що вона активна
+).add_to(m)
+
+# Супутникова (тільки як опція)
+folium.TileLayer(
+    tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+    attr='Google Satellite',
+    name='Супутник',
+    overlay=False,
+    control=True,
+    show=False  # <-- ВАЖЛИВО: не активна при старті
+).add_to(m)
 
     if st.session_state.clicked_coords:
         folium.Marker(
