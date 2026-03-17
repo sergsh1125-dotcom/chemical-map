@@ -5,7 +5,7 @@ from streamlit_folium import st_folium
 from datetime import datetime
 
 # ===============================
-# 1. Налаштування сторінки
+# 1. СТОРІНКА
 # ===============================
 st.set_page_config(page_title="КАРТА ХІМІЧНОЇ ОБСТАНОВКИ", page_icon="☣️", layout="wide")
 
@@ -17,54 +17,62 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ===============================
-# 2. Session state
+# 2. SESSION STATE
 # ===============================
 if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame(columns=["lat", "lon", "substance", "value", "unit", "time"])
+    st.session_state.data = pd.DataFrame(columns=["lat","lon","substance","value","unit","time"])
+
 if "clicked_coords" not in st.session_state:
     st.session_state.clicked_coords = None
 
 # ===============================
-# 3. HTML підпис (з довгою рискою)
+# 3. ПІДПИС
 # ===============================
-def get_marker_html(text_main, text_sub):
+def marker_html(main, sub):
     return f"""
-<div style="display:inline-block; font-family:Arial; font-size:10pt; color:red; font-weight:bold; text-align:center;
-            text-shadow: -1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff;">
-    <div style="border-bottom:2px solid red; display:inline-block; padding-bottom:2px; margin-bottom:2px;">
-        {text_main}
+    <div style="display:inline-block; text-align:center; font-family:Arial; font-size:10pt; color:red; font-weight:bold;
+                text-shadow: -1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff;">
+        <div style="border-bottom:2px solid red; display:inline-block; padding-bottom:2px; margin-bottom:2px;">
+            {main}
+        </div>
+        <div style="font-weight:normal;">{sub}</div>
     </div>
-    <div style="font-weight:normal;">{text_sub}</div>
-</div>
-"""
+    """
 
 # ===============================
-# 4. Карта
+# 4. КАРТА
 # ===============================
 def create_map(df, lat, lon, zoom):
+
     m = folium.Map(location=[lat, lon], zoom_start=zoom, tiles=None, control_scale=True)
 
-    folium.TileLayer('OpenStreetMap', name='Карта').add_to(m)
+    # ОСНОВА
+    folium.TileLayer('OpenStreetMap', name='Карта', show=True).add_to(m)
+
+    # СУПУТНИК (НЕ АКТИВНИЙ)
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         attr='Google Satellite',
-        name='Супутник'
+        name='Супутник',
+        show=False
     ).add_to(m)
 
-    # Маркер кліку
-    if st.session_state.clicked_coords:
+    # МАРКЕР КЛІКУ
+    if st.session_state.clicked_coords is not None:
         folium.Marker(
             [st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']],
             icon=folium.Icon(color="red")
         ).add_to(m)
 
-    # Точки
+    # ТОЧКИ
     if not df.empty:
         for day in sorted(df['time'].unique(), reverse=True):
             group = folium.FeatureGroup(name=f"📅 {day}")
+
             for _, r in df[df['time'] == day].iterrows():
-                main_text = f"{r['substance']} {float(r['value']):.2f} {r['unit']}"
-                sub_text = r['time']
+
+                main = f"{r['substance']} {float(r['value']):.2f} {r['unit']}"
+                sub = r['time']
 
                 folium.CircleMarker(
                     [r.lat, r.lon],
@@ -77,7 +85,7 @@ def create_map(df, lat, lon, zoom):
                     [r.lat, r.lon],
                     icon=folium.DivIcon(
                         icon_anchor=(80, 45),
-                        html=get_marker_html(main_text, sub_text)
+                        html=marker_html(main, sub)
                     )
                 ).add_to(group)
 
@@ -87,21 +95,24 @@ def create_map(df, lat, lon, zoom):
     return m
 
 # ===============================
-# 5. Інтерфейс
+# 5. ІНТЕРФЕЙС
 # ===============================
 st.header("☣️ КАРТА ХІМІЧНОЇ ОБСТАНОВКИ")
-col_map, col_panel = st.columns([3, 1])
 
+col_map, col_panel = st.columns([3,1])
+
+# -------- ПУЛЬТ --------
 with col_panel:
     st.subheader("ПУЛЬТ УПРАВЛІННЯ")
 
-    # Координати кліку
-    if st.session_state.clicked_coords:
+    if st.session_state.clicked_coords is not None:
         lat = st.session_state.clicked_coords['lat']
         lon = st.session_state.clicked_coords['lng']
+
         st.write(f"Координати: {lat:.6f}, {lon:.6f}")
 
         c1, c2 = st.columns(2)
+
         if c1.button("Вставити координати у форму", use_container_width=True):
             st.session_state.manual_lat = lat
             st.session_state.manual_lon = lon
@@ -113,7 +124,7 @@ with col_panel:
 
     st.divider()
 
-    # Вручну
+    # ВРУЧНУ
     st.markdown("### НАНЕСЕННЯ ТОЧКИ ВРУЧНУ")
 
     lat = st.number_input("Широта", format="%.6f", value=st.session_state.get("manual_lat", 50.45))
@@ -121,7 +132,7 @@ with col_panel:
 
     substance = st.text_input("Речовина", "Хлор")
     value = st.number_input("Значення", format="%.2f")
-    unit = st.selectbox("Одиниця", ["мг/м³", "ppm"])
+    unit = st.selectbox("Одиниця", ["мг/м³","ppm"])
     time = st.date_input("Дата", value=datetime.now()).strftime("%d.%m.%Y")
 
     if st.button("Нанести на карту"):
@@ -140,18 +151,18 @@ with col_panel:
 
     # CSV
     st.markdown("### НАНЕСЕННЯ З ТАБЛИЦІ")
+
     file = st.file_uploader("CSV", type=["csv"])
 
-    if file and st.button("Імпортувати"):
+    if file and st.button("Імпортувати", use_container_width=True):
         df = pd.read_csv(file)
         if 'time' in df.columns:
-            df['time'] = pd.to_datetime(df['time'], dayfirst=True).dt.strftime('%d.%m.%Y')
+            df['time'] = pd.to_datetime(df['time'], dayfirst=True, errors='coerce').dt.strftime('%d.%m.%Y')
+
         st.session_state.data = pd.concat([st.session_state.data, df], ignore_index=True)
         st.rerun()
 
-# ===============================
-# 6. Карта
-# ===============================
+# -------- КАРТА --------
 with col_map:
 
     if st.session_state.data.empty:
@@ -163,19 +174,23 @@ with col_map:
 
     m = create_map(st.session_state.data, lat, lon, zoom)
 
+    # 🔥 ГОЛОВНЕ ВИПРАВЛЕННЯ
     map_output = st_folium(
         m,
         width="100%",
         height=750,
+        key="chem_map",  # ОБОВ’ЯЗКОВО
         returned_objects=["last_clicked"]
     )
 
     clicked = map_output.get("last_clicked")
-    if clicked and st.session_state.clicked_coords != clicked:
-        st.session_state.clicked_coords = clicked
-        st.rerun()
 
-    # Кнопки
+    if clicked is not None:
+        if st.session_state.clicked_coords != clicked:
+            st.session_state.clicked_coords = clicked
+            st.rerun()
+
+    # КНОПКИ
     c1, c2 = st.columns(2)
 
     if c1.button("Очистити карту", use_container_width=True):
@@ -184,6 +199,7 @@ with col_map:
         st.rerun()
 
     if not st.session_state.data.empty:
+
         st.subheader("Таблиця вимірювань")
 
         st.dataframe(
