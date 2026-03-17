@@ -149,11 +149,10 @@ with col_map:
             group = folium.FeatureGroup(name=f"Дата: {d}")
             day_data = df[df['time'] == d]
 
-           for _, r in day_data.iterrows():
+          for _, r in day_data.iterrows():
     val_f = f"{r['value']:.4f}".rstrip('0').rstrip('.')
 
-    label_html = f"""
-<div style="
+    label_html = f"""<div style="
 display: inline-block;
 font-family: Arial;
 font-size: 10pt;
@@ -183,8 +182,7 @@ text-shadow:
             {r['time']}
         </div>
     </div>
-</div>
-"""
+</div>"""
 
     folium.CircleMarker(
         [r.lat, r.lon],
