@@ -104,13 +104,10 @@ with col_map:
     else:
         m_lat, m_lon = 50.4501, 30.5234
 
-    # Створюємо карту БЕЗ шарів за замовчуванням
-    m = folium.Map(location=[m_lat, m_lon], zoom_start=10, tiles=None, control_scale=True)
+    # ГАРАНТОВАНО завантажуємо OpenStreetMap як основну
+    m = folium.Map(location=[m_lat, m_lon], zoom_start=10, tiles='OpenStreetMap', control_scale=True)
 
-    # ПЕРШИМ додаємо OpenStreetMap — він стане основним (Default)
-    folium.TileLayer('OpenStreetMap', name='Стандартна карта').add_to(m)
-    
-    # ДРУГИМ додаємо супутник
+    # Додаємо супутник як ОПЦІОНАЛЬНИЙ шар (overlay=False робить його перемикачем)
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         attr='Google Satellite',
@@ -133,32 +130,34 @@ with col_map:
             for _, r in day_data.iterrows():
                 val_f = f"{r['value']:.4f}".rstrip('0').rstrip('.')
                 
-                # HTML-підпис: СИНІЙ ТЕКСТ, ЖИРНИЙ, БІЛА ПІДСВІТКА ДЛЯ СУПУТНИКА, ЧІТКА РИСКА
+                # Покращений HTML-підпис (без зайвих прямокутників, з чіткою лінією)
                 label_html = f"""
                 <div style="
                     font-family: 'Arial', sans-serif; 
                     font-size: 10pt; 
                     color: blue; 
                     font-weight: bold;
-                    white-space: nowrap;
                     text-align: center;
-                    line-height: 1.1;
-                    background-color: rgba(255, 255, 255, 0.9); /* Майже непрозорий білий фон */
-                    padding: 4px 6px;
-                    border: 1px solid blue;
-                    border-radius: 4px;
-                    box-shadow: 2px 2px 5px rgba(0,0,0,0.5); /* Тінь для видимості */
+                    background-color: rgba(255, 255, 255, 0.85);
+                    padding: 5px;
+                    border-radius: 5px;
+                    border: 1.5px solid blue;
+                    display: inline-block;
+                    white-space: nowrap;
+                    box-shadow: 3px 3px 10px rgba(0,0,0,0.3);
                 ">
                     <div style="margin-bottom: 2px;">{r['substance']} — {val_f} мг/м³</div>
-                    <div style="background-color: blue; height: 1.5px; width: 100%; margin: 2px auto;"></div>
+                    <div style="height: 2px; background-color: blue; width: 100%; margin: 2px 0;"></div>
                     <div style="margin-top: 2px;">{r['time']}</div>
                 </div>
                 """
                 
+                # Синя точка вимірювання
                 folium.CircleMarker(
                     [r.lat, r.lon], radius=6, color="blue", fill=True, fill_opacity=1
                 ).add_to(group)
 
+                # Текстовий напис (Marker з DivIcon)
                 folium.map.Marker(
                     [r.lat, r.lon],
                     icon=folium.DivIcon(
@@ -171,7 +170,6 @@ with col_map:
 
     folium.LayerControl(collapsed=False).add_to(m)
 
-    # Важливо: use_container_width=True для карти
     map_data = st_folium(m, width="100%", height=700, key="main_map")
 
     if map_data.get("last_clicked"):
