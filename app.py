@@ -152,7 +152,7 @@ with col_map:
             for _, r in day_data.iterrows():
                 val_f = f"{r['value']:.4f}".rstrip('0').rstrip('.')
 
-                label_html = f"""
+             label_html = f"""
 <div style="
     display: inline-block;
     font-family: Arial;
@@ -161,7 +161,6 @@ with col_map:
     font-weight: bold;
     text-align: center;
     background-color: transparent;
-    padding: 2px 4px;
     text-shadow:
         -1px -1px 0 #fff,
          1px -1px 0 #fff,
@@ -171,14 +170,19 @@ with col_map:
 ">
     <div style="
         display: inline-block;
-        border-bottom: 2px solid blue;
-        padding-bottom: 2px;
-        margin-bottom: 2px;
         white-space: nowrap;
     ">
-        {r['substance']} — {val_f} мг/м³
+        <div style="
+            border-bottom: 2px solid blue;
+            padding-bottom: 2px;
+            margin-bottom: 2px;
+        ">
+            {r['substance']} — {val_f} мг/м³
+        </div>
+        <div style="font-weight: normal;">
+            {r['time']}
+        </div>
     </div>
-    <div>{r['time']}</div>
 </div>
 """
 
