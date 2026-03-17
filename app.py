@@ -154,15 +154,15 @@ with col_map:
 
                 label_html = f"""
 <div style="
+    width: 180px;
     font-family: Arial;
     font-size: 10pt;
     color: blue;
     font-weight: bold;
     text-align: center;
     background-color: transparent;
-    display: block;
-    min-width: 140px;
     padding: 2px 4px;
+    box-sizing: border-box;
     text-shadow:
         -1px -1px 0 #fff,
          1px -1px 0 #fff,
