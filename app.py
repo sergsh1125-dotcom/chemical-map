@@ -154,7 +154,7 @@ with col_map:
 
                 label_html = f"""
 <div style="
-    width: 180px;
+    display: inline-block;
     font-family: Arial;
     font-size: 10pt;
     color: blue;
@@ -162,7 +162,6 @@ with col_map:
     text-align: center;
     background-color: transparent;
     padding: 2px 4px;
-    box-sizing: border-box;
     text-shadow:
         -1px -1px 0 #fff,
          1px -1px 0 #fff,
@@ -171,10 +170,11 @@ with col_map:
          2px 2px 3px rgba(255,255,255,0.8);
 ">
     <div style="
+        display: inline-block;
         border-bottom: 2px solid blue;
-        width: 100%;
-        margin-bottom: 2px;
         padding-bottom: 2px;
+        margin-bottom: 2px;
+        white-space: nowrap;
     ">
         {r['substance']} — {val_f} мг/м³
     </div>
