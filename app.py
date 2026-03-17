@@ -7,7 +7,7 @@ from datetime import datetime
 # ===============================
 # 1. СТОРІНКА
 # ===============================
-st.set_page_config(page_title="КАРТА ХІМІЧНОЇ ОБСТАНОВКИ", page_icon="☣️", layout="wide")
+st.set_page_config(page_title="КАРТА ХІМІЧНОЇ ОБСТАНОВКИ", layout="wide")
 
 st.markdown("""
 <style>
