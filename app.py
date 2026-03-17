@@ -2,25 +2,26 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
-from datetime import datetime
+import io
 
 # ===============================
 # Налаштування сторінки
 # ===============================
-st.set_page_config(page_title="Chemical Hazard Map", layout="wide")
+st.set_page_config(
+    page_title="Chemical Hazard Map",
+    layout="wide"
+)
 
-# Приховуємо елементи Streamlit
 st.markdown("""
 <style>
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header {visibility: hidden;}
-.stNumberInput input { font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
 # ===============================
-# Стан програми
+# Стан програми (Session State)
 # ===============================
 if "data" not in st.session_state:
     st.session_state.data = pd.DataFrame(columns=["lat", "lon", "substance", "value", "time"])
@@ -28,136 +29,148 @@ if "data" not in st.session_state:
 if "clicked_coords" not in st.session_state:
     st.session_state.clicked_coords = None
 
-# Зберігаємо значення полів введення в сесії для автозаповнення
-if "form_lat" not in st.session_state:
-    st.session_state.form_lat = 50.4501
-if "form_lon" not in st.session_state:
-    st.session_state.form_lon = 30.5234
-
 # ===============================
 # Заголовок
 # ===============================
 st.title("Карта хімічної обстановки")
 
+# ===============================
+# Розподіл екрану
+# ===============================
 col_map, col_gui = st.columns([2.5, 1])
 
 # ===============================
-# Права панель (Пульт управління)
+# Права панель (GUI)
 # ===============================
 with col_gui:
-    st.subheader("Пульт управління")
-    
-    with st.form("add_point_form", clear_on_submit=False):
-        st.markdown("### Нанесення точки")
-        substance = st.text_input("Назва хімічної речовини", placeholder="Наприклад: Хлор")
-        
-        # Поля, які оновлюються при кліку на карту
-        lat_val = st.number_input("Широта", format="%.6f", value=st.session_state.form_lat)
-        lon_val = st.number_input("Довгота", format="%.6f", value=st.session_state.form_lon)
-        
-        concentration = st.number_input("Концентрація (мг/куб. м)", min_value=0.0, step=0.001, format="%.4f")
-        
-        # Дата за замовчуванням сьогодні
-        date_input = st.date_input("Дата вимірювання", datetime.now())
-        
-        submit_button = st.form_submit_button("Нанести на карту", use_container_width=True)
+    st.subheader("⚙️ Управління та Координати")
 
-    if submit_button:
-        new_date = date_input.strftime("%d.%m.%Y")
-        new_row = pd.DataFrame([{
-            "lat": lat_val, 
-            "lon": lon_val, 
-            "substance": substance, 
-            "value": concentration, 
-            "time": new_date
-        }])
+    # СЕКЦІЯ КЛІКУ ПО КАРТІ
+    if st.session_state.clicked_coords:
+        c_lat = st.session_state.clicked_coords['lat']
+        c_lon = st.session_state.clicked_coords['lng']
+        
+        st.info(f"📍 Координати на карті:\n**Широта:** {c_lat:.6f}\n**Довгота:** {c_lon:.6f}")
+        
+        c1, c2 = st.columns(2)
+        # Збереження обраних координат
+        clicked_df = pd.DataFrame([{"lat": c_lat, "lon": c_lon}])
+        csv = clicked_df.to_csv(index=False).encode('utf-8')
+        c1.download_button("💾 Зберегти координати", csv, "point_coords.csv", "text/csv", use_container_width=True)
+        
+        if c2.button("✏️ Вставити в форму", use_container_width=True):
+            st.session_state.manual_lat = c_lat
+            st.session_state.manual_lon = c_lon
+            st.rerun()
+    else:
+        st.write("👆 *Клікніть на карту, щоб визначити координати точки*")
+
+    st.divider()
+
+    # СЕКЦІЯ ДОДАВАННЯ ТОЧКИ
+    st.markdown("### ➕ Нанесення точки вручну")
+    
+    # Використовуємо значення з сесії для автозаповнення
+    default_lat = st.session_state.get('manual_lat', 50.4501)
+    default_lon = st.session_state.get('manual_lon', 30.5234)
+
+    substance = st.text_input("Назва речовини", placeholder="Наприклад: Хлор")
+    lat_input = st.number_input("Широта (lat)", format="%.6f", value=default_lat)
+    lon_input = st.number_input("Довгота (lon)", format="%.6f", value=default_lon)
+    
+    value = st.number_input("Концентрація (мг/куб. м)", min_value=0.0, step=0.001, format="%.4f")
+    # Форматування дати за замовчуванням
+    default_time = pd.Timestamp.now().strftime("%d.%m.%Y")
+    time_input = st.text_input("Дата (ДД.ММ.РРРР)", value=default_time)
+
+    if st.button("✅ Нанести на карту", use_container_width=True):
+        new_row = pd.DataFrame([{"lat": lat_input, "lon": lon_input, "substance": substance, "value": value, "time": time_input}])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
-        st.success("Точку додано")
+        st.toast(f"Точку {substance} додано!")
         st.rerun()
 
     st.divider()
     
-    if st.button("Очистити карту", use_container_width=True):
+    if st.button("🧹 Очистити все", use_container_width=True):
         st.session_state.data = pd.DataFrame(columns=["lat", "lon", "substance", "value", "time"])
         st.session_state.clicked_coords = None
+        st.session_state.manual_lat = 50.4501
+        st.session_state.manual_lon = 30.5234
         st.rerun()
 
 # ===============================
-# Візуалізація карти
+# Візуалізація на карті
 # ===============================
 with col_map:
-    # Базові налаштування центру
-    m = folium.Map(
-        location=[st.session_state.form_lat, st.session_state.form_lon], 
-        zoom_start=10, 
-        control_scale=True
-    )
+    # Визначаємо центр карти
+    if not st.session_state.data.empty:
+        center_lat, center_lon, zoom = st.session_state.data.lat.mean(), st.session_state.data.lon.mean(), 11
+    else:
+        center_lat, center_lon, zoom = 50.4501, 30.5234, 10
 
-    # 1. Обробка кліку: малюємо тимчасове віконце з координатами
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom, control_scale=True)
+
+    # 1. Вікно з координатами при кліку
     if st.session_state.clicked_coords:
-        c_lat = st.session_state.clicked_coords['lat']
-        c_lng = st.session_state.clicked_coords['lng']
-        
         folium.Marker(
-            [c_lat, c_lng],
-            popup=folium.Popup(f"Координати захоплено:<br><b>{c_lat:.5f}, {c_lng:.5f}</b>", max_width=200, show=True),
-            icon=folium.Icon(color="red", icon="info-sign")
+            [st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']],
+            popup=folium.Popup(
+                f"Координати:<br><b>{st.session_state.clicked_coords['lat']:.6f}</b><br><b>{st.session_state.clicked_coords['lng']:.6f}</b>", 
+                max_width=200, show=True
+            ),
+            icon=folium.Icon(color="red", icon="crosshairs", prefix="fa")
         ).add_to(m)
 
-    # 2. Нанесення існуючих точок обстановки
+    # 2. Нанесення існуючих даних
     if not st.session_state.data.empty:
         for _, r in st.session_state.data.iterrows():
-            val_fmt = f"{r['value']:.4f}".rstrip('0').rstrip('.')
+            val_formatted = f"{r['value']:.4f}".rstrip('0').rstrip('.')
             
-            # Створення дворядкового напису з рискою
+            # HTML-контейнер для дворядкового напису
             label_html = f"""
             <div style="
-                font-family: Arial, sans-serif; 
+                font-family: 'Arial', sans-serif; 
                 font-size: 10pt; 
                 color: black; 
-                background-color: rgba(255,255,255,0.8);
-                border: 1px solid gray;
-                padding: 3px;
-                border-radius: 3px;
+                background-color: rgba(255,255,255,0.85);
+                border: 1px solid #333;
+                padding: 4px;
+                border-radius: 4px;
                 white-space: nowrap;
                 text-align: center;
-                line-height: 1.2;
+                line-height: 1.3;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
             ">
-                <b>{r['substance']} — {val_fmt} мг/куб. м</b>
-                <hr style="margin: 2px 0; border: 0; border-top: 1px solid black;">
-                {r['time']}
+                <b>{r['substance']} — {val_formatted} мг/куб. м</b>
+                <hr style="margin: 3px 0; border: 0; border-top: 1px solid black;">
+                <span>{r['time']}</span>
             </div>
             """
             
-            # Текстовий напис над точкою
+            # Напис (Marker) розташовується над точкою
             folium.map.Marker(
                 [r.lat, r.lon],
                 icon=folium.DivIcon(
-                    icon_anchor=(60, 45), # Зміщення, щоб напис був над точкою
+                    icon_anchor=(70, 55), # Регулювання позиції напису над точкою
                     html=label_html
                 )
             ).add_to(m)
             
-            # Сама точка (кружечок)
+            # Сама точка
             folium.CircleMarker(
-                [r.lat, r.lon],
-                radius=6,
-                color="blue",
-                fill=True,
-                fill_color="blue",
-                fill_opacity=0.9
+                [r.lat, r.lon], 
+                radius=6, 
+                color="blue", 
+                fill=True, 
+                fill_color="blue", 
+                fill_opacity=0.8
             ).add_to(m)
 
-    # Відображення карти та зчитування подій
-    map_output = st_folium(m, width="100%", height=750, key="chem_map_main")
+    # Відображення карти
+    map_data = st_folium(m, width="100%", height=750, key="main_map")
 
-    # Обробка логіки кліку
-    if map_output.get("last_clicked"):
-        clicked = map_output["last_clicked"]
-        # Перевіряємо, чи це новий клік
-        if st.session_state.clicked_coords != clicked:
-            st.session_state.clicked_coords = clicked
-            # Завантажуємо в пульт управління
-            st.session_state.form_lat = clicked['lat']
-            st.session_state.form_lon = clicked['lng']
+    # Оновлення координат при кліку
+    if map_data.get("last_clicked"):
+        if st.session_state.clicked_coords != map_data["last_clicked"]:
+            st.session_state.clicked_coords = map_data["last_clicked"]
             st.rerun()
