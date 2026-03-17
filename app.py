@@ -61,8 +61,11 @@ with col_gui:
     st.markdown("### Нанесення точок вимірювання з таблиці")
     uploaded_file = st.file_uploader("Виберіть файл CSV", type="csv", label_visibility="collapsed")
     if uploaded_file and st.button("завантажити з файлу csv", use_container_width=True):
-        st.session_state.data = pd.concat([st.session_state.data, pd.read_csv(uploaded_file)], ignore_index=True)
-        st.rerun()
+        try:
+            st.session_state.data = pd.concat([st.session_state.data, pd.read_csv(uploaded_file)], ignore_index=True)
+            st.rerun()
+        except:
+            st.error("Помилка файлу")
 
     if st.button("Очистити карту", use_container_width=True):
         st.session_state.data = pd.DataFrame(columns=["lat", "lon", "substance", "value", "time"])
@@ -75,13 +78,10 @@ with col_gui:
 with col_map:
     center = [st.session_state.data.lat.iloc[-1], st.session_state.data.lon.iloc[-1]] if not st.session_state.data.empty else [50.4501, 30.5234]
     
-    # Створюємо порожню карту
     m = folium.Map(location=center, zoom_start=10, tiles=None, control_scale=True)
 
-    # 1. ПЕРШИМ додаємо OSM і ставимо show=True
+    # Шари карти
     folium.TileLayer('OpenStreetMap', name='Стандартна карта', control=True, show=True).add_to(m)
-    
-    # 2. ДРУГИМ додаємо Супутник і ставимо show=False
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         attr='Google Satellite', name='Супутник', control=True, show=False
@@ -97,22 +97,28 @@ with col_map:
             for _, r in day_data.iterrows():
                 val_f = f"{r['value']:.4f}".rstrip('0').rstrip('.')
                 
-                # HTML БЕЗ прямокутників: риска через border-bottom
+                # HTML З ПРОЗОРИМ ФОНОМ ТА ПІДСВІТКОЮ ТЕКСТУ
                 label_html = f"""
                 <div style="
                     font-family: 'Arial', sans-serif; font-size: 10pt; color: blue; font-weight: bold;
-                    text-align: center; background-color: rgba(255, 255, 255, 0.9);
-                    padding: 4px 8px; border-radius: 4px; border: 1.2px solid blue;
-                    display: inline-block; white-space: nowrap; box-shadow: 2px 2px 8px rgba(0,0,0,0.4);
+                    text-align: center; background-color: transparent; /* ПРОЗОРИЙ ФОН */
+                    display: inline-block; white-space: nowrap;
+                    /* БІЛЕ "СВІТІННЯ" НАВКОЛО ЛІТЕР ДЛЯ ЧИТАБЕЛЬНОСТІ НА СУПУТНИКУ */
+                    text-shadow: 
+                        -1px -1px 0 #fff,  
+                         1px -1px 0 #fff,
+                        -1px  1px 0 #fff,
+                         1px  1px 0 #fff,
+                         2px  2px 3px rgba(255,255,255,0.8);
                 ">
-                    <div style="border-bottom: 2px solid blue; padding-bottom: 2px; margin-bottom: 2px;">
+                    <div style="border-bottom: 2px solid blue; padding-bottom: 1px; margin-bottom: 1px;">
                         {r['substance']} — {val_f} мг/м³
                     </div>
                     <div>{r['time']}</div>
                 </div>
                 """
                 folium.CircleMarker([r.lat, r.lon], radius=6, color="blue", fill=True, fill_opacity=1).add_to(group)
-                folium.map.Marker([r.lat, r.lon], icon=folium.DivIcon(icon_anchor=(70, 50), html=label_html)).add_to(group)
+                folium.map.Marker([r.lat, r.lon], icon=folium.DivIcon(icon_anchor=(70, 45), html=label_html)).add_to(group)
             group.add_to(m)
 
     folium.LayerControl(collapsed=False).add_to(m)
@@ -123,7 +129,7 @@ with col_map:
         st.rerun()
 
 # ===============================
-# 4. Таблиця
+# 4. Таблиця та Експорт
 # ===============================
 st.divider()
 if not st.session_state.data.empty:
