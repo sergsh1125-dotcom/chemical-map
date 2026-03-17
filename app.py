@@ -76,7 +76,6 @@ def create_map(df_data, lat, lon, zoom):
 # 5. Інтерфейс пульта
 # ===============================
 st.header("КАРТА ХІМІЧНОЇ ОБСТАНОВКИ")
-screen_width = st.experimental_get_query_params().get("w", [0])[0]
 is_mobile = int(screen_width) < 600
 
 if is_mobile:
