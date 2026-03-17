@@ -11,9 +11,7 @@ st.set_page_config(page_title="Chemical Map Pro", layout="wide")
 
 st.markdown("""
 <style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header {visibility: hidden;}
+#MainMenu, footer, header {visibility: hidden;}
 .stButton button {font-weight: bold;}
 </style>
 """, unsafe_allow_html=True)
@@ -26,127 +24,133 @@ if "data" not in st.session_state:
 if "clicked_coords" not in st.session_state:
     st.session_state.clicked_coords = None
 
-st.title("Карта хімічної обстановки")
-col_map, col_gui = st.columns([2.5, 1])
+# ===============================
+# 3. Маркер з підписом і синьою рискою
+# ===============================
+def get_custom_marker_html(substance, value, time):
+    return f"""
+<div style="
+    font-family: Arial, sans-serif; font-size: 10pt; color: blue; font-weight: bold;
+    text-align: center; display: inline-block; white-space: nowrap;
+    text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 2px 2px 3px rgba(255,255,255,0.8);
+    background-color: transparent;
+">
+    <div>{substance} — {value:.2f} мг/м³</div>
+    <div style="height:2px; background-color: blue; width: 100%; margin:1px 0;"></div>
+    <div style="font-weight: normal;">{time}</div>
+</div>
+"""
 
 # ===============================
-# 3. Пульт управління
+# 4. Створення карти
 # ===============================
+def create_map(df_data, lat, lon, zoom):
+    m = folium.Map(location=[lat, lon], zoom_start=zoom, tiles=None, control_scale=True)
+    folium.TileLayer('OpenStreetMap', name='Стандартна карта', show=True).add_to(m)
+    folium.TileLayer(
+        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        attr='Google Satellite', name='Супутник', show=False
+    ).add_to(m)
+    if st.session_state.clicked_coords:
+        folium.Marker(
+            [st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']],
+            icon=folium.Icon(color="red")
+        ).add_to(m)
+    if not df_data.empty:
+        for d in sorted(df_data['time'].unique(), reverse=True):
+            group = folium.FeatureGroup(name=f"📅 {d}")
+            for _, r in df_data[df_data['time']==d].iterrows():
+                folium.CircleMarker([r.lat, r.lon], radius=6, color="blue", fill=True, fill_opacity=1).add_to(group)
+                folium.Marker(
+                    [r.lat, r.lon],
+                    icon=folium.DivIcon(
+                        icon_anchor=(70, 50),
+                        html=get_custom_marker_html(r['substance'], r['value'], r['time'])
+                    )
+                ).add_to(group)
+            group.add_to(m)
+    folium.LayerControl(collapsed=False).add_to(m)
+    return m
+
+# ===============================
+# 5. Інтерфейс пульта
+# ===============================
+st.header("КАРТА ХІМІЧНОЇ ОБСТАНОВКИ")
+screen_width = st.experimental_get_query_params().get("w", [0])[0]
+is_mobile = int(screen_width) < 600
+
+if is_mobile:
+    col_map = st.container()
+    col_gui = st.container()
+else:
+    col_map, col_gui = st.columns([2.5,1])
+
 with col_gui:
-    st.subheader("Пульт управління")
+    st.subheader("ПУЛЬТ УПРАВЛІННЯ")
     if st.session_state.clicked_coords:
         c_lat, c_lon = st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']
         st.write(f"Вибрано: {c_lat:.6f}, {c_lon:.6f}")
         r1, r2 = st.columns(2)
-        if r1.button("вставити координати у форму", use_container_width=True):
+        if r1.button("Вставити координати у форму", use_container_width=True):
             st.session_state.manual_lat, st.session_state.manual_lon = c_lat, c_lon
             st.rerun()
-        if r2.button("виключити маркер на карті", use_container_width=True):
+        if r2.button("Виключити маркер на карті", use_container_width=True):
             st.session_state.clicked_coords = None
             st.rerun()
 
     st.divider()
-    st.markdown("### Нанесення точки вимірювання вручну")
-    with st.container(border=True):
-        substance = st.text_input("Назва хімічної речовини", placeholder="Хлор")
-        v_lat = st.number_input("Широта", format="%.6f", value=st.session_state.get('manual_lat', 50.4501))
-        v_lon = st.number_input("Довгота", format="%.6f", value=st.session_state.get('manual_lon', 30.5234))
-        concentration = st.number_input("Концентрація (мг/м³)", format="%.4f", step=0.001)
-        date_input = st.text_input("Дата вимірювання", value=datetime.now().strftime("%d.%m.%Y"))
-
-        if st.button("Нанести на карту", use_container_width=True):
-            new_entry = pd.DataFrame([{"lat": v_lat, "lon": v_lon, "substance": substance, "value": concentration, "time": date_input}])
-            st.session_state.data = pd.concat([st.session_state.data, new_entry], ignore_index=True)
-            st.rerun()
+    st.markdown("### НАНЕСЕННЯ ТОЧКИ ВИМІРЮВАННЯ ВРУЧНУ")
+    l1 = st.number_input("Широта", format="%.6f", value=st.session_state.get('manual_lat',50.4501))
+    l2 = st.number_input("Довгота", format="%.6f", value=st.session_state.get('manual_lon',30.5234))
+    substance = st.text_input("Назва хімічної речовини", placeholder="Хлор")
+    val = st.number_input("Концентрація (мг/м³)", format="%.2f", step=0.01)
+    tim = st.date_input("Дата", value=datetime.now()).strftime("%d.%m.%Y")
+    if st.button("Нанести на карту", use_container_width=True):
+        row = pd.DataFrame([{"lat":l1,"lon":l2,"substance":substance,"value":val,"time":tim}])
+        st.session_state.data = pd.concat([st.session_state.data,row], ignore_index=True)
+        st.rerun()
 
     st.divider()
-    st.markdown("### Нанесення точок вимірювання з таблиці")
-    uploaded_file = st.file_uploader("Виберіть файл CSV", type="csv", label_visibility="collapsed")
-    if uploaded_file and st.button("завантажити з файлу csv", use_container_width=True):
+    st.markdown("### НАНЕСЕННЯ ТОЧОК ВИМІРЮВАННЯ З ТАБЛИЦІ")
+    uploaded_file = st.file_uploader("Виберіть CSV", type=["csv"], label_visibility="collapsed")
+    if uploaded_file and st.button("Імпортувати з файлу", use_container_width=True):
         try:
-            st.session_state.data = pd.concat([st.session_state.data, pd.read_csv(uploaded_file)], ignore_index=True)
+            df_new = pd.read_csv(uploaded_file)
+            if 'time' in df_new.columns:
+                df_new['time'] = pd.to_datetime(df_new['time'], dayfirst=True, errors='coerce').dt.strftime('%d.%m.%Y')
+            st.session_state.data = pd.concat([st.session_state.data, df_new], ignore_index=True)
             st.rerun()
-        except:
-            st.error("Помилка файлу")
+        except Exception as e:
+            st.error(f"Помилка файлу: {e}")
+
+# ===============================
+# 6. Карта і таблиця
+# ===============================
+with col_map:
+    if st.session_state.data.empty:
+        s_lat, s_lon, s_zoom = 50.4501, 30.5234, 10
+    else:
+        df_c = st.session_state.data.dropna(subset=['lat','lon'])
+        s_lat, s_lon = df_c.lat.mean(), df_c.lon.mean()
+        s_zoom = 10
+
+    m = create_map(st.session_state.data, s_lat, s_lon, s_zoom)
+    map_out = st_folium(m, width="100%", height=700, key="chem_map")
+
+    if map_out.get("last_clicked"):
+        st.session_state.clicked_coords = map_out["last_clicked"]
+        st.rerun()
 
     if st.button("Очистити карту", use_container_width=True):
-        st.session_state.data = pd.DataFrame(columns=["lat", "lon", "substance", "value", "time"])
+        st.session_state.data = pd.DataFrame(columns=["lat","lon","substance","value","time"])
         st.session_state.clicked_coords = None
         st.rerun()
 
-# ===============================
-# 4. Візуалізація на карті
-# ===============================
-with col_map:
-    center = [st.session_state.data.lat.iloc[-1], st.session_state.data.lon.iloc[-1]] if not st.session_state.data.empty else [50.4501, 30.5234]
-
-    m = folium.Map(location=center, zoom_start=10, tiles=None, control_scale=True)
-
-    # Стандартна карта за замовчуванням
-    folium.TileLayer('OpenStreetMap', name='Стандартна карта', control=True, show=True).add_to(m)
-    # Супутник як опціональний шар
-    folium.TileLayer(
-        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        attr='Google Satellite', name='Супутник', control=True, show=False
-    ).add_to(m)
-
-    if st.session_state.clicked_coords:
-        folium.Marker([st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']], icon=folium.Icon(color="red")).add_to(m)
-
     if not st.session_state.data.empty:
-        for d in st.session_state.data['time'].unique():
-            group = folium.FeatureGroup(name=f"Дата: {d}")
-            day_data = st.session_state.data[st.session_state.data['time'] == d]
-
-            for _, r in day_data.iterrows():
-                val_f = f"{r['value']:.4f}".rstrip('0').rstrip('.')
-
-                # HTML-підпис з рискою під текстом
-                label_html = f"""<div style="
-display: inline-block;
-font-family: Arial;
-font-size: 10pt;
-color: blue;
-font-weight: bold;
-text-align: center;
-background-color: transparent;
-text-shadow:
-    -1px -1px 0 #fff,
-     1px -1px 0 #fff,
-    -1px  1px 0 #fff,
-     1px  1px 0 #fff,
-     2px 2px 3px rgba(255,255,255,0.8);
-">
-    <div style="display: inline-block; white-space: nowrap;">
-        <div style="border-bottom: 2px solid blue; padding-bottom: 2px; margin-bottom: 2px;">
-            {r['substance']} — {val_f} мг/м³
-        </div>
-        <div style="font-weight: normal;">{r['time']}</div>
-    </div>
-</div>"""
-
-                folium.CircleMarker([r.lat, r.lon], radius=6, color="blue", fill=True).add_to(group)
-                folium.Marker([r.lat, r.lon], icon=folium.DivIcon(icon_anchor=(70, 45), html=label_html)).add_to(group)
-
-            group.add_to(m)
-
-    folium.LayerControl(collapsed=False).add_to(m)
-    map_output = st_folium(m, width="100%", height=700, key="main_map")
-
-    if map_output.get("last_clicked") and st.session_state.clicked_coords != map_output["last_clicked"]:
-        st.session_state.clicked_coords = map_output["last_clicked"]
-        st.rerun()
-
-# ===============================
-# 5. Таблиця та Експорт
-# ===============================
-st.divider()
-if not st.session_state.data.empty:
-    ed_df = st.data_editor(st.session_state.data, use_container_width=True, num_rows="dynamic")
-    if not ed_df.equals(st.session_state.data):
-        st.session_state.data = ed_df
-        st.rerun()
-
-    c1, c2 = st.columns(2)
-    c1.download_button("Завантажити карту в HTML", m._repr_html_(), "chem_map.html", "text/html", use_container_width=True)
-    c2.download_button("Зберегти таблицю в CSV", st.session_state.data.to_csv(index=False), "chem_data.csv", "text/csv", use_container_width=True)
+        st.subheader("Список нанесених точок")
+        st.dataframe(st.session_state.data, use_container_width=True)
+        c1,c2 = st.columns(2)
+        c1.download_button("Завантажити карту в HTML", m._repr_html_(),
+                           f"chemical_map_{datetime.now().strftime('%Y%m%d')}.html","text/html", use_container_width=True)
+        c2.download_button("Завантажити таблицю", st.session_state.data.to_csv(index=False).encode('utf-8'),
+                           f"chemical_data_{datetime.now().strftime('%Y%m%d')}.csv","text/csv", use_container_width=True)
