@@ -201,6 +201,14 @@ text-shadow:
         )
     ).add_to(group)
 
+    folium.Marker(
+        [r.lat, r.lon],
+        icon=folium.DivIcon(
+            icon_anchor=(70, 45),
+            html=label_html
+        )
+    ).add_to(group)
+
                 folium.Marker(
                     [r.lat, r.lon],
                     icon=folium.DivIcon(
