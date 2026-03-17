@@ -111,23 +111,22 @@ with col_gui:
 
     st.divider()
     st.markdown("### НАНЕСЕННЯ ТОЧКИ ВИМІРЮВАННЯ ВРУЧНУ")
-    with st.container():
-        lat_input = st.number_input("Широта", format="%.6f", value=st.session_state.get('manual_lat', 50.4501))
-        lon_input = st.number_input("Довгота", format="%.6f", value=st.session_state.get('manual_lon', 30.5234))
-        substance_input = st.text_input("Назва хімічної речовини", placeholder="Хлор")
-        value_input = st.number_input("Значення", format="%.2f", step=0.01)
-        date_input = st.date_input("Дата", value=datetime.now()).strftime("%d.%m.%Y")
+    lat_input = st.number_input("Широта", format="%.6f", value=st.session_state.get('manual_lat', 50.4501))
+    lon_input = st.number_input("Довгота", format="%.6f", value=st.session_state.get('manual_lon', 30.5234))
+    substance_input = st.text_input("Назва хімічної речовини", placeholder="Хлор")
+    value_input = st.number_input("Значення", format="%.2f", step=0.01)
+    date_input = st.date_input("Дата", value=datetime.now()).strftime("%d.%m.%Y")
 
-        if st.button("Нанести на карту", use_container_width=True):
-            new_row = pd.DataFrame([{
-                "lat": lat_input,
-                "lon": lon_input,
-                "substance": substance_input,
-                "value": value_input,
-                "time": date_input
-            }])
-            st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
-            st.rerun()
+    if st.button("Нанести на карту", use_container_width=True):
+        new_row = pd.DataFrame([{
+            "lat": lat_input,
+            "lon": lon_input,
+            "substance": substance_input,
+            "value": value_input,
+            "time": date_input
+        }])
+        st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
+        st.rerun()
 
     st.divider()
     st.markdown("### НАНЕСЕННЯ ТОЧОК ВИМІРЮВАННЯ З ТАБЛИЦІ")
@@ -187,5 +186,17 @@ if not st.session_state.data.empty:
         st.rerun()
 
     c1, c2 = st.columns(2)
-    c1.download_button("Завантажити карту в HTML", final_map._repr_html_(), f"chemical_map_{datetime.now().strftime('%Y%m%d')}.html", "text/html", use_container_width=True)
-    c2.download_button("Завантажити таблицю", st.session_state.data.to_csv(index=False), f"chemical_data_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv", use_container_width=True)
+    c1.download_button(
+        label="Завантажити карту в HTML",
+        data=final_map._repr_html_(),
+        file_name=f"chemical_map_{datetime.now().strftime('%Y%m%d')}.html",
+        mime="text/html",
+        use_container_width=True
+    )
+    c2.download_button(
+        label="Завантажити таблицю",
+        data=st.session_state.data.to_csv(index=False),
+        file_name=f"chemical_data_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
