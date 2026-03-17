@@ -149,33 +149,33 @@ with col_map:
             group = folium.FeatureGroup(name=f"Дата: {d}")
             day_data = df[df['time'] == d]
 
-            for _, r in day_data.iterrows():
-                val_f = f"{r['value']:.4f}".rstrip('0').rstrip('.')
+           for _, r in day_data.iterrows():
+    val_f = f"{r['value']:.4f}".rstrip('0').rstrip('.')
 
-             label_html = f"""
+    label_html = f"""
 <div style="
-    display: inline-block;
-    font-family: Arial;
-    font-size: 10pt;
-    color: blue;
-    font-weight: bold;
-    text-align: center;
-    background-color: transparent;
-    text-shadow:
-        -1px -1px 0 #fff,
-         1px -1px 0 #fff,
-        -1px  1px 0 #fff,
-         1px  1px 0 #fff,
-         2px 2px 3px rgba(255,255,255,0.8);
+display: inline-block;
+font-family: Arial;
+font-size: 10pt;
+color: blue;
+font-weight: bold;
+text-align: center;
+background-color: transparent;
+text-shadow:
+    -1px -1px 0 #fff,
+     1px -1px 0 #fff,
+    -1px  1px 0 #fff,
+     1px  1px 0 #fff,
+     2px 2px 3px rgba(255,255,255,0.8);
 ">
     <div style="
-        display: inline-block;
-        white-space: nowrap;
+    display: inline-block;
+    white-space: nowrap;
     ">
         <div style="
-            border-bottom: 2px solid blue;
-            padding-bottom: 2px;
-            margin-bottom: 2px;
+        border-bottom: 2px solid blue;
+        padding-bottom: 2px;
+        margin-bottom: 2px;
         ">
             {r['substance']} — {val_f} мг/м³
         </div>
@@ -186,12 +186,20 @@ with col_map:
 </div>
 """
 
-                folium.CircleMarker(
-                    [r.lat, r.lon],
-                    radius=6,
-                    color="blue",
-                    fill=True
-                ).add_to(group)
+    folium.CircleMarker(
+        [r.lat, r.lon],
+        radius=6,
+        color="blue",
+        fill=True
+    ).add_to(group)
+
+    folium.Marker(
+        [r.lat, r.lon],
+        icon=folium.DivIcon(
+            icon_anchor=(70, 45),
+            html=label_html
+        )
+    ).add_to(group)
 
                 folium.Marker(
                     [r.lat, r.lon],
