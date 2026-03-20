@@ -5,9 +5,9 @@ from streamlit_folium import st_folium
 from datetime import datetime
 
 # ===============================
-# 1. Налаштування сторінки
+# 1. СТОРІНКА
 # ===============================
-st.set_page_config(page_title="КАРТА РХБ ОБСТАНОВКИ", page_icon="☢️", layout="wide")
+st.set_page_config(page_title="КАРТА ХІМІЧНОЇ ОБСТАНОВКИ", layout="wide")
 
 st.markdown("""
 <style>
@@ -17,34 +17,60 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ===============================
-# 2. Стан програми
+# 2. SESSION STATE
 # ===============================
 if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame(columns=["lat", "lon", "value", "unit", "time", "type", "substance"])
+    st.session_state.data = pd.DataFrame(columns=["lat","lon","substance","value","unit","time"])
 
 if "clicked_coords" not in st.session_state:
     st.session_state.clicked_coords = None
 
 # ===============================
-# 3. Підпис маркеру
+# 3. ПІДПИС
 # ===============================
-def get_custom_marker_html(value_text, date_text):
+def marker_html(main, sub):
     return f"""
-<div style="display:inline-block; font-family: Arial; font-size:10pt; color:blue; font-weight:bold; text-align:center;
-text-shadow:-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff;">
-    <div style="white-space: nowrap;">{value_text}</div>
-    <div>{date_text}</div>
-</div>
-"""
+    <div style="
+        display: inline-block;
+        font-family: Arial;
+        font-size: 10pt;
+        color: blue;
+        font-weight: bold;
+        text-align: center;
+        white-space: nowrap;
+        background-color: transparent;
+        text-shadow:
+            -1px -1px 0 #fff,
+             1px -1px 0 #fff,
+            -1px  1px 0 #fff,
+             1px  1px 0 #fff,
+             2px  2px 3px rgba(255,255,255,0.9);
+    ">
+        <div style="
+            border-bottom: 2px solid blue;
+            display: inline-block;
+            padding-bottom: 2px;
+            margin-bottom: 2px;
+        ">
+            {main}
+        </div>
+        <div style="font-weight: normal;">
+            {sub}
+        </div>
+    </div>
+    """
 
 # ===============================
-# 4. Створення карти
+# 4. КАРТА
 # ===============================
-def create_map(df_data, start_lat, start_lon, zoom_val):
-    m = folium.Map(location=[start_lat, start_lon], zoom_start=zoom_val, tiles=None, control_scale=True)
+def create_map(df, lat, lon, zoom):
 
-    folium.TileLayer('OpenStreetMap', name='Стандартна карта', show=True).add_to(m)
+    m = folium.Map(location=[lat, lon], zoom_start=zoom, tiles=None, control_scale=True)
 
+    # ОСНОВА
+    folium.TileLayer('OpenStreetMap', name='Карта', show=True).add_to(m)
+
+    # СУПУТНИК (НЕ АКТИВНИЙ)
     folium.TileLayer(
         tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
         attr='Google Satellite',
@@ -52,39 +78,37 @@ def create_map(df_data, start_lat, start_lon, zoom_val):
         show=False
     ).add_to(m)
 
-    if st.session_state.clicked_coords:
+    # МАРКЕР КЛІКУ
+    if st.session_state.clicked_coords is not None:
         folium.Marker(
             [st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']],
             icon=folium.Icon(color="red")
         ).add_to(m)
 
-    if not df_data.empty:
-        for day_val in sorted(df_data['time'].unique(), reverse=True):
-            group = folium.FeatureGroup(name=f"📅 {day_val}")
+    # ТОЧКИ
+    if not df.empty:
+        for day in sorted(df['time'].unique(), reverse=True):
+            group = folium.FeatureGroup(name=f"📅 {day}")
 
-            for _, r in df_data[df_data['time'] == day_val].iterrows():
+            for _, r in df[df['time'] == day].iterrows():
 
-                color = "blue" if r["type"] == "радіоактивне забруднення" else "black"
-
-                val_label = (
-                    f"☢ {float(r['value']):.2f} {r['unit']}"
-                    if r["type"] == "радіоактивне забруднення"
-                    else f"☣ {r['substance']} {float(r['value']):.2f} {r['unit']}"
-                )
+                main = f"{r['substance']} {float(r['value']):.2f} {r['unit']}"
+                sub = r['time']
 
                 folium.CircleMarker(
-                    [r.lat, r.lon],
-                    radius=6,
-                    color=color,
-                    fill=True,
-                    fill_color=color
-                ).add_to(group)
+    [r.lat, r.lon],
+    radius=6,
+    color="orange",
+    fill=True,
+    fill_color="orange",
+    fill_opacity=1
+).add_to(group)
 
                 folium.Marker(
                     [r.lat, r.lon],
                     icon=folium.DivIcon(
-                        icon_anchor=(70, 45),
-                        html=get_custom_marker_html(val_label, str(r['time']))
+                        icon_anchor=(80, 45),
+                        html=marker_html(main, sub)
                     )
                 ).add_to(group)
 
@@ -94,140 +118,137 @@ def create_map(df_data, start_lat, start_lon, zoom_val):
     return m
 
 # ===============================
-# 5. ПУЛЬТ УПРАВЛІННЯ
+# 5. ІНТЕРФЕЙС
 # ===============================
-st.header("☢️ КАРТА РХБ ОБСТАНОВКИ")
+st.header("КАРТА ХІМІЧНОЇ ОБСТАНОВКИ")
 
-col_map, col_gui = st.columns([3, 1])
+col_map, col_panel = st.columns([3,1])
 
-with col_gui:
+# -------- ПУЛЬТ --------
+with col_panel:
     st.subheader("ПУЛЬТ УПРАВЛІННЯ")
 
-    # ===== Координати =====
-    if st.session_state.clicked_coords:
-        c_lat, c_lon = st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']
-        st.write(f"Вибрано: {c_lat:.6f}, {c_lon:.6f}")
+    if st.session_state.clicked_coords is not None:
+        lat = st.session_state.clicked_coords['lat']
+        lon = st.session_state.clicked_coords['lng']
+
+        st.write(f"Координати: {lat:.6f}, {lon:.6f}")
 
         c1, c2 = st.columns(2)
-        if c1.button("Вставити координати у форму"):
-            st.session_state.manual_lat = c_lat
-            st.session_state.manual_lon = c_lon
+
+        if c1.button("Вставити координати у форму", use_container_width=True):
+            st.session_state.manual_lat = lat
+            st.session_state.manual_lon = lon
             st.rerun()
 
-        if c2.button("Виключити маркер"):
+        if c2.button("Виключити маркер", use_container_width=True):
             st.session_state.clicked_coords = None
             st.rerun()
 
     st.divider()
 
-    # ===== Вибір типу =====
-    data_type = st.radio(
-        "Тип забруднення",
-        ["радіоактивне забруднення", "хімічне забруднення"]
-    )
+    # ВРУЧНУ
+    st.markdown("### НАНЕСЕННЯ ТОЧКИ ВРУЧНУ")
 
-    # ===== Координати =====
-    st.markdown("### Точка вимірювання")
+    lat = st.number_input("Широта", format="%.6f", value=st.session_state.get("manual_lat", 50.45))
+    lon = st.number_input("Довгота", format="%.6f", value=st.session_state.get("manual_lon", 30.52))
 
-    l1 = st.number_input("Широта", format="%.6f", value=st.session_state.get('manual_lat', 50.4501))
-    l2 = st.number_input("Довгота", format="%.6f", value=st.session_state.get('manual_lon', 30.5234))
-
-    # ===== Речовина =====
-    substance = ""
-
-    if data_type == "хімічне забруднення":
-        substance = st.text_input("Речовина")
-
-    # ===== Значення =====
-    val = st.number_input("Значення", step=0.01, format="%.2f")
-
-    # ===== Одиниці =====
-    if data_type == "радіоактивне забруднення":
-        uni = st.selectbox("Одиниця", ["мкЗв/год", "мЗв/год"])
-    else:
-        uni = st.selectbox("Одиниця", ["мг/м³"])
-
-    tim = st.date_input("Дата", value=datetime.now()).strftime("%d.%m.%Y")
+    substance = st.text_input("Речовина", "Хлор")
+    value = st.number_input("Значення", format="%.2f")
+    unit = st.selectbox("Одиниця", ["мг/м³","ppm"])
+    time = st.date_input("Дата", value=datetime.now()).strftime("%d.%m.%Y")
 
     if st.button("Нанести на карту"):
-        new_row = pd.DataFrame([{
-            "lat": l1,
-            "lon": l2,
-            "value": val,
-            "unit": uni,
-            "time": tim,
-            "type": data_type,
-            "substance": substance
+        new = pd.DataFrame([{
+            "lat": lat,
+            "lon": lon,
+            "substance": substance,
+            "value": value,
+            "unit": unit,
+            "time": time
         }])
-
-        st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
+        st.session_state.data = pd.concat([st.session_state.data, new], ignore_index=True)
         st.rerun()
 
     st.divider()
 
-    # ===== CSV =====
-    uploaded_file = st.file_uploader("CSV", type=["csv"], label_visibility="collapsed")
+    # CSV
+    st.markdown("### НАНЕСЕННЯ З ТАБЛИЦІ")
 
-    if uploaded_file and st.button("Імпортувати"):
-        df_new = pd.read_csv(uploaded_file)
+    file = st.file_uploader("CSV", type=["csv"])
 
-        if 'time' in df_new.columns:
-            df_new['time'] = pd.to_datetime(df_new['time'], dayfirst=True, errors='coerce').dt.strftime('%d.%m.%Y')
+    if file and st.button("Імпортувати", use_container_width=True):
+        df = pd.read_csv(file)
+        if 'time' in df.columns:
+            df['time'] = pd.to_datetime(df['time'], dayfirst=True, errors='coerce').dt.strftime('%d.%m.%Y')
 
-        st.session_state.data = pd.concat([st.session_state.data, df_new], ignore_index=True)
+        st.session_state.data = pd.concat([st.session_state.data, df], ignore_index=True)
         st.rerun()
 
-# ===============================
-# 6. КАРТА
-# ===============================
+# -------- КАРТА --------
 with col_map:
+
     if st.session_state.data.empty:
-        s_lat, s_lon, s_zoom = 49.0, 31.0, 6
+        lat, lon, zoom = 49, 31, 6
     else:
-        df_c = st.session_state.data.dropna(subset=['lat', 'lon'])
-        s_lat, s_lon = df_c.lat.mean(), df_c.lon.mean()
-        s_zoom = 9
+        lat = st.session_state.data.lat.mean()
+        lon = st.session_state.data.lon.mean()
+        zoom = 9
 
-    m = create_map(st.session_state.data, s_lat, s_lon, s_zoom)
+    m = create_map(st.session_state.data, lat, lon, zoom)
 
+    # 🔥 ГОЛОВНЕ ВИПРАВЛЕННЯ
     map_output = st_folium(
-        m, width="100%", height=750, returned_objects=["last_clicked"]
+        m,
+        width="100%",
+        height=750,
+        key="chem_map",  # ОБОВ’ЯЗКОВО
+        returned_objects=["last_clicked"]
     )
 
     clicked = map_output.get("last_clicked")
 
-    if clicked and st.session_state.clicked_coords != clicked:
-        st.session_state.clicked_coords = clicked
-        st.rerun()
+    if clicked is not None:
+        if st.session_state.clicked_coords != clicked:
+            st.session_state.clicked_coords = clicked
+            st.rerun()
 
-    # ===== Кнопки =====
+    # КНОПКИ
     c1, c2 = st.columns(2)
 
-    if c1.button("Очистити карту"):
-        st.session_state.data = pd.DataFrame(columns=["lat","lon","value","unit","time","type","substance"])
+    if c1.button("Очистити карту", use_container_width=True):
+        st.session_state.data = pd.DataFrame(columns=["lat","lon","substance","value","unit","time"])
         st.session_state.clicked_coords = None
         st.rerun()
 
     if not st.session_state.data.empty:
-        st.subheader("Точки")
+
+        st.subheader("Таблиця вимірювань")
 
         st.dataframe(
-            st.session_state.data,
+            st.session_state.data.rename(columns={
+                "lat":"Широта",
+                "lon":"Довгота",
+                "substance":"Речовина",
+                "value":"Значення",
+                "unit":"Одиниця",
+                "time":"Дата"
+            }),
             use_container_width=True
         )
 
-        if c2.button("Завантажити HTML"):
+        if c2.button("Завантажити карту в HTML", use_container_width=True):
             st.download_button(
-                "Завантажити карту",
+                "Скачати HTML",
                 m._repr_html_(),
-                f"map_{datetime.now().strftime('%Y%m%d')}.html",
+                "chemical_map.html",
                 "text/html"
             )
 
-        if c2.button("Завантажити CSV"):
+        if c2.button("Завантажити таблицю", use_container_width=True):
             st.download_button(
-                "Завантажити дані",
+                "Скачати CSV",
                 st.session_state.data.to_csv(index=False),
-                f"data_{datetime.now().strftime('%Y%m%d')}.csv",
+                "chemical_data.csv",
                 "text/csv"
             )
