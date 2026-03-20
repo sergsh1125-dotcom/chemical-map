@@ -117,6 +117,7 @@ with col_map:
     else:
         c_lat, c_lon, zoom_val = 48.3794, 31.1656, 6
 
+    # ВИПРАВЛЕНО: Додано подвійні дужки {{ }} для URL карти та функцій JS
     map_html = f"""
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
@@ -139,24 +140,20 @@ with col_map:
 var chemData = {json_data};
 var map = L.map('map',{{attributionControl:false, preferCanvas: true}}).setView([{c_lat},{c_lon}], {zoom_val});
 
-L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}.png',{{ crossOrigin: 'anonymous' }}).addTo(map);
+// Тут було виправлено {{s}}, {{z}}, {{x}}, {{y}}
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{ crossOrigin: 'anonymous' }}).addTo(map);
 
-// Група для нанесення "офіційних" даних (з таблиці)
 var dataGroup = L.featureGroup().addTo(map);
-// Група для нанесення оперативної обстановки (вручну)
 var operationalGroup = L.featureGroup().addTo(map);
 
-// --- 1. ВІДОБРАЖЕННЯ ДАНИХ З ТАБЛИЦІ (Ваші оригінальні стилі) ---
 chemData.forEach(function(r) {{
     var lat = parseFloat(r.lat);
     var lon = parseFloat(r.lon);
     
-    // Точка вимірювання (Помаранчева, як у вас)
     L.circleMarker([lat, lon], {{
         radius: 6, color: "orange", fillColor: "orange", fillOpacity: 1, weight: 2
     }}).addTo(dataGroup);
 
-    // Підпис (Синій текст з лінією, як у вас)
     var labelHtml = `
         <div style="display:inline-block; font-family:Arial; font-size:10pt; color:blue; font-weight:bold; text-align:center; white-space:nowrap; text-shadow:2px 2px 2px #fff;">
             <div style="border-bottom: 2px solid blue; padding-bottom:2px; margin-bottom:2px;">
@@ -170,18 +167,13 @@ chemData.forEach(function(r) {{
     }}).addTo(dataGroup);
 }});
 
-// --- 2. ПАНЕЛЬ МАЛЮВАННЯ (Як вчора, але маркер дефолтний) ---
-// Більше не визначаємо custom radIcon. Leaflet.draw використає дефолтну синю шпильку.
-
 var drawControl = new L.Control.Draw({{
     draw:{{
         polygon: {{ shapeOptions: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.5, weight: 2 }} }},
         rectangle: {{ shapeOptions: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.5, weight: 2 }} }},
         circle: {{ shapeOptions: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.5, weight: 2 }} }},
         polyline: {{ shapeOptions: {{ color: 'black', weight: 3 }} }},
-        // ЗМІНЕНО: marker:true активує стандартну синю шпильку
         marker: true,
-        // Жовта точка (фіксований розмір)
         circlemarker: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.9, radius: 8 }}
     }},
     edit: {{ featureGroup: operationalGroup }}
@@ -190,53 +182,47 @@ map.addControl(drawControl);
 
 map.on(L.Draw.Event.CREATED, function(e){{
     var layer = e.layer;
-    // Дефолтний маркер залишаємо як є, для інших фігур - жовте заповнення
     if(e.layerType !== 'marker' && e.layerType !== 'circlemarker' && e.layerType !== 'polyline') {{
         layer.setStyle({{color:'black', fillColor:'yellow', fillOpacity:0.5}});
     }}
-    // Додаємо в групу оперативної обстановки
     operationalGroup.addLayer(layer);
-    
-    // Завершення операції (один клік - одна фігура)
     drawControl._toolbars.draw._modes[e.layerType].handler.disable();
 }});
 
-// --- 3. ФУНКЦІЇ ІНТЕРФЕЙСУ ---
-function addText(){{{
+function addText() {{
     var t = prompt("Введіть текст:");
-    if(t) {{{
-        map.once('click', function(e){{{
-            L.marker(e.latlng, {{{ icon: L.divIcon({{{
+    if(t) {{
+        map.once('click', function(e){{
+            L.marker(e.latlng, {{ icon: L.divIcon({{
                 html: '<div style="background:white; border:1px solid black; padding:2px; font-weight:bold; color:black;">'+t+'</div>',
                 className: ''
-            }}}) }}}).addTo(operationalGroup);
-        }}});
-    }}}
-}}}
+            }}) }}).addTo(operationalGroup);
+        }});
+    }}
+}}
 
-function clearOperational() {{{
-    if(confirm("Видалити нанесену оперативну обстановку (фігури, текст)? Таблиця вимірювань залишиться.")) {{{
+function clearOperational() {{
+    if(confirm("Видалити нанесену оперативну обстановку (фігури, текст)?")) {{
         operationalGroup.clearLayers();
-    }}}
-}}}
+    }}
+}}
 
-function downloadPNG(){{{
+function downloadPNG() {{
     const area = document.getElementById("capture_area");
-    html2canvas(area, {{{
+    html2canvas(area, {{
         useCORS: true, 
         scale: 2, 
-        scrollY: -window.scrollY // Стабільний експорт
-    }}}).then(canvas => {{{
+        scrollY: -window.scrollY
+    }}).then(canvas => {{
         var link = document.createElement("a");
         link.download = "Chemical_Situation_Report.png";
         link.href = canvas.toDataURL();
         link.click();
-    }}});
-}}}
+    }});
+}}
 </script>
 """
-    components.html(map_html, height=730)
-
+    st.components.v1.html(map_html, height=730)
 # -------- ТАБЛИЦЯ ДАНИХ (Внизу сторінки) --------
 if not st.session_state.chem_data.empty:
     st.markdown('<p class="module-header">ЖУРНАЛ ХІМІЧНИХ ВИМІРЮВАНЬ</p>', unsafe_allow_html=True)
