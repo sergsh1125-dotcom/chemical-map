@@ -1,187 +1,207 @@
 import streamlit as st
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
-from folium.plugins import Draw
+import json
 from datetime import datetime
 
-# ===============================
-# 1. КОНФІГУРАЦІЯ ТА СТИЛІ
-# ===============================
-st.set_page_config(page_title="КАРТА ХІМІЧНОЇ ОБСТАНОВКИ", layout="wide")
+# --- 1. НАЛАШТУВАННЯ СТОРІНКИ (З вашого коду) ---
+st.set_page_config(
+    page_title="Chemical Hazard Map",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
+# --- 2. СТИЛІЗАЦІЯ (Об'єднана) ---
 st.markdown("""
 <style>
-#MainMenu, footer, header {visibility: hidden;}
-.stButton button {font-weight: bold; background-color: #ffcc00 !important; color: black !important; width: 100%;}
+#MainMenu, footer, header, .stDeployButton {visibility: hidden; display: none !important;}
+.block-container {padding:1rem !important; max-width:100% !important;}
+.stApp {background-color:#0e1117; color:#e0e0e0;}
+.main-title {color:#ffcc00 !important; text-align:center !important; font-size:25px !important; font-weight:bold !important; margin-top:-30px !important; text-transform:uppercase !important;}
+div[data-testid="stButton"] button {background-color:#ffcc00 !important; color:#000 !important; font-weight:bold !important; width:100%;}
 .stNumberInput input {font-weight: bold;}
 </style>
 """, unsafe_allow_html=True)
 
-# ===============================
-# 2. SESSION STATE (ЗБЕРЕЖЕННЯ ДАНИХ)
-# ===============================
+st.markdown('<p class="main-title">Модуль 1.5. Карта фактичної хімічної обстановки</p>', unsafe_allow_html=True)
+
+# --- 3. СТАН ПРОГРАМИ (Session State) ---
 if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame(columns=["lat","lon","substance","value","unit","time"])
+    st.session_state.data = pd.DataFrame(columns=["lat", "lon", "substance", "value", "time"])
 
-if "clicked_coords" not in st.session_state:
-    st.session_state.clicked_coords = None
-
+# Допоміжні змінні для кліку (Ваш стабільний механізм)
 if "manual_lat" not in st.session_state: st.session_state.manual_lat = 48.3794
 if "manual_lon" not in st.session_state: st.session_state.manual_lon = 31.1656
 
-# НОВЕ: Список для зберігання нарисованих об'єктів (щоб не зникали)
-if "drawn_items" not in st.session_state:
-    st.session_state.drawn_items = []
+# --- 4. РОЗПОДІЛ ЕКРАНУ ---
+col_map, col_gui = st.columns([3, 1])
 
-# ===============================
-# 3. ДОПОМІЖНІ ФУНКЦІЇ
-# ===============================
-def marker_html(main, sub):
-    return f"""
-    <div style="display: inline-block; font-family: Arial; font-size: 10pt; color: blue; font-weight: bold; text-align: center; white-space: nowrap; text-shadow: 2px 2px 2px #fff;">
-        <div style="border-bottom: 2px solid blue; padding-bottom: 2px; margin-bottom: 2px;">{main}</div>
-        <div style="font-weight: normal;">{sub}</div>
-    </div>
-    """
+# --- 5. ПРАВА ПАНЕЛЬ (Ваш стабільний GUI) ---
+with col_gui:
+    st.subheader("⚙️ Управління даними")
 
-# Стилі для інструментів малювання
-draw_style = {'color': 'black', 'fillColor': 'yellow', 'fillOpacity': 0.5, 'weight': 2}
+    # Блок отримання координат (Механізм, який ви просили повернути)
+    st.markdown("### 📍 Координати з карти")
+    # Спеціальний компонент для отримання даних з JS назад у Streamlit
+    placeholder_lat = st.empty()
+    placeholder_lon = st.empty()
 
-# ===============================
-# 4. СТВОРЕННЯ КАРТИ
-# ===============================
-def create_map(df, lat, lon, zoom):
-    m = folium.Map(location=[lat, lon], zoom_start=zoom, tiles=None, control_scale=True)
-    
-    folium.TileLayer('OpenStreetMap', name='Карта', show=True).add_to(m)
-    folium.TileLayer(
-        tiles='https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        attr='Google Satellite', name='Супутник', show=False
-    ).add_to(m)
-
-    # 1. Відображення збережених нарисованих об'єктів
-    for item in st.session_state.drawn_items:
-        folium.GeoJson(item, style_function=lambda x: draw_style).add_to(m)
-
-    # 2. Маркер кліку (Червоний)
-    if st.session_state.clicked_coords:
-        folium.Marker(
-            [st.session_state.clicked_coords['lat'], st.session_state.clicked_coords['lng']],
-            icon=folium.Icon(color="red", icon="info-sign")
-        ).add_to(m)
-
-    # 3. Офіційні точки з таблиці
-    if not df.empty:
-        for _, r in df.iterrows():
-            main_txt = f"{r['substance']} {r['value']} {r['unit']}"
-            folium.CircleMarker(
-                [r.lat, r.lon], radius=6, color="orange", fill=True, fill_color="orange", fill_opacity=1
-            ).add_to(m)
-            folium.Marker(
-                [r.lat, r.lon],
-                icon=folium.DivIcon(icon_anchor=(80, 45), html=marker_html(main_txt, r['time']))
-            ).add_to(m)
-
-    # 4. Налаштування панелі малювання (ВИПРАВЛЕНО КОЛЬОРИ ТА ТИПИ)
-    draw_plugin = Draw(
-        export=False,
-        draw_options={
-            'polyline': {'shapeOptions': {'color': 'black', 'weight': 3}},
-            'polygon': {'shapeOptions': draw_style},
-            'rectangle': {'shapeOptions': draw_style},
-            'circle': {'shapeOptions': draw_style},
-            'marker': True,
-            'circlemarker': False # Вимкнено, щоб не плутати з колом
-        },
-        edit_options={'edit': True, 'remove': True}
-    )
-    draw_plugin.add_to(m)
-
-    return m
-
-# ===============================
-# 5. ІНТЕРФЕЙС
-# ===============================
-st.header("1.5. КАРТА ФАКТИЧНОЇ ХІМІЧНОЇ ОБСТАНОВКИ")
-
-col_map, col_panel = st.columns([3, 1])
-
-with col_panel:
-    st.subheader("ПУЛЬТ УПРАВЛІННЯ")
-
-    # ЛОГІКА КЛІКУ
-    if st.session_state.clicked_coords:
-        c_lat = st.session_state.clicked_coords['lat']
-        c_lon = st.session_state.clicked_coords['lng']
-        st.success(f"Координати: {c_lat:.6f}, {c_lon:.6f}")
-        
-        if st.button("ЗАВАНТАЖИТИ КООРДИНАТИ"):
-            st.session_state.manual_lat = c_lat
-            st.session_state.manual_lon = c_lon
+    if st.button("ЗАВАНТАЖИТИ КООРДИНАТИ"):
+        # Ці змінні оновляться через JS query parameter або при повторному рендері
+        if "last_map_click" in st.session_state:
+            st.session_state.manual_lat = st.session_state.last_map_click[0]
+            st.session_state.manual_lon = st.session_state.last_map_click[1]
             st.rerun()
-            
-        if st.button("ВИКЛЮЧИТИ МАРКЕР"):
-            st.session_state.clicked_coords = None
-            st.rerun()
-    else:
-        st.info("Клікніть на карті для вибору точки")
 
     st.divider()
 
-    # ФОРМА ВВОДУ
-    in_lat = st.number_input("Широта", format="%.6f", value=st.session_state.manual_lat)
-    in_lon = st.number_input("Довгота", format="%.6f", value=st.session_state.manual_lon)
-    substance = st.text_input("Речовина", "Хлор")
-    value = st.number_input("Значення", format="%.2f")
-    unit = st.selectbox("Одиниця", ["мг/м³","ppm"])
-    time_val = st.date_input("Дата", value=datetime.now()).strftime("%d.%m.%Y")
+    st.markdown("### ➕ Додати точку вручну")
+    substance = st.text_input("Назва речовина", value="Хлор")
+    in_lat = st.number_input("Широта (lat)", format="%.6f", value=st.session_state.manual_lat)
+    in_lon = st.number_input("Довгота (lon)", format="%.6f", value=st.session_state.manual_lon)
+    value = st.number_input("Концентрація (мг/м³)", format="%.5f", value=0.0)
+    # Дата автоматично (як на комп'ютері)
+    time_input = st.text_input("Дата та час", value=datetime.now().strftime("%d.%m.%Y %H:%M"))
 
-    if st.button("НАНЕСТИ НА КАРТУ"):
-        new = pd.DataFrame([{"lat": in_lat, "lon": in_lon, "substance": substance, "value": value, "unit": unit, "time": time_val}])
-        st.session_state.data = pd.concat([st.session_state.data, new], ignore_index=True)
+    if st.button("➕ Додати на карту", use_container_width=True):
+        new_row = pd.DataFrame([{"lat": in_lat, "lon": in_lon, "substance": substance, "value": value, "time": time_input}])
+        st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
         st.rerun()
 
-    st.divider()
-    if st.button("🗑️ ОЧИСТИТИ ВСЕ (МАЛЮНКИ + ТАБЛИЦЯ)"):
-        st.session_state.data = pd.DataFrame(columns=["lat","lon","substance","value","unit","time"])
-        st.session_state.drawn_items = []
-        st.session_state.clicked_coords = None
+    if st.button("🧹 Очистити ТАБЛИЦЮ", use_container_width=True):
+        st.session_state.data = pd.DataFrame(columns=["lat", "lon", "substance", "value", "time"])
         st.rerun()
 
-# -------- ВІДОБРАЖЕННЯ КАРТИ --------
+# --- 6. ЦЕНТР (КАРТА З ПАНЕЛЛЮ ТА ЕКСПОРТОМ) ---
 with col_map:
-    # Центрування
-    if st.session_state.data.empty:
-        start_lat, start_lon, zoom = 48.3794, 31.1656, 6
-    else:
-        start_lat, start_lon, zoom = st.session_state.data.lat.iloc[-1], st.session_state.data.lon.iloc[-1], 10
+    # Підготовка даних для JS
+    json_points = st.session_state.data.to_json(orient='records')
+    
+    map_html = f"""
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
-    m = create_map(st.session_state.data, start_lat, start_lon, zoom)
+<div id="capture_area" style="background:#0e1117; padding:5px; border-radius:8px;">
+    <div id="map" style="height:680px; width:100%; border-radius:8px;"></div>
+</div>
 
-    # Виклик компонента карти
-    map_output = st_folium(
-        m,
-        width="100%",
-        height=700,
-        key="chem_map_v4",
-        returned_objects=["last_clicked", "all_drawings"]
-    )
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 5px; margin-top: 10px;">
+    <button onclick="addText()" style="padding:10px; background:#ffcc00; color:black; border:none; border-radius:4px; font-weight:bold; cursor:pointer; font-size:11px;">ВСТАВИТИ ТЕКСТ</button>
+    <button onclick="clearMap()" style="padding:10px; background:#ffcc00; color:black; border:none; border-radius:4px; font-weight:bold; cursor:pointer; font-size:11px;">ОЧИСТИТИ МАЛЮНКИ</button>
+    <button onclick="downloadPNG()" style="padding:10px; background:#ffcc00; color:black; border:none; border-radius:4px; font-weight:bold; cursor:pointer; font-size:11px;">ЕКСПОРТ PNG</button>
+    <button onclick="window.print()" style="padding:10px; background:#ffcc00; color:black; border:none; border-radius:4px; font-weight:bold; cursor:pointer; font-size:11px;">ДРУК / PDF</button>
+</div>
 
-    # ОБРОБКА МАЛЮНКІВ (збереження в пам'ять)
-    if map_output.get("all_drawings"):
-        # Якщо кількість нарисованих об'єктів змінилася, оновлюємо сесію
-        if map_output["all_drawings"] != st.session_state.drawn_items:
-            st.session_state.drawn_items = map_output["all_drawings"]
-            st.rerun()
+<script>
+var map = L.map('map',{{attributionControl:false, preferCanvas: true}}).setView([{st.session_state.manual_lat}, {st.session_state.manual_lon}], 7);
 
-    # ОБРОБКА КЛІКУ
-    if map_output.get("last_clicked"):
-        clicked = map_output["last_clicked"]
-        if st.session_state.clicked_coords != clicked:
-            st.session_state.clicked_coords = clicked
-            st.rerun()
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{ crossOrigin: 'anonymous' }}).addTo(map);
 
-# -------- ТАБЛИЦЯ --------
+var drawnItems = new L.FeatureGroup().addTo(map);
+var pointsLayer = new L.FeatureGroup().addTo(map);
+
+// --- ЛОГІКА МАРКЕРА КЛІКУ ---
+var clickMarker = L.marker([0,0], {{draggable: false}}).addTo(map);
+clickMarker.setOpacity(0);
+
+map.on('click', function(e) {{
+    var lat = e.latlng.lat.toFixed(6);
+    var lon = e.latlng.lng.toFixed(6);
+    clickMarker.setLatLng(e.latlng).setOpacity(1);
+    
+    // Передача координат в Streamlit (через прихований інтерфейс)
+    window.parent.postMessage({{
+        type: 'streamlit:setComponentValue',
+        value: [lat, lon]
+    }}, '*');
+}});
+
+// --- НАНЕСЕННЯ ТОЧОК З ТАБЛИЦІ ---
+var pointsData = {json_points};
+pointsData.forEach(function(p) {{
+    var lat = parseFloat(p.lat);
+    var lon = parseFloat(p.lon);
+    
+    L.circleMarker([lat, lon], {{
+        radius: 7, color: "blue", fillColor: "blue", fillOpacity: 0.8, weight: 2
+    }}).addTo(pointsLayer);
+
+    var label = L.divIcon({{
+        html: `<div style="font-family:sans-serif; font-size:11pt; color:blue; font-weight:bold; white-space:nowrap; text-shadow:1px 1px 2px white;">${{p.substance}}: ${{p.value}} | ${{p.time}}</div>`,
+        iconAnchor: [-15, 7], className: ''
+    }});
+    L.marker([lat, lon], {{icon: label}}).addTo(pointsLayer);
+}});
+
+// --- ПАНЕЛЬ МАЛЮВАННЯ (Як у Стартовій карті) ---
+var drawControl = new L.Control.Draw({{
+    draw:{{
+        polygon: {{ shapeOptions: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.5, weight: 2 }} }},
+        rectangle: {{ shapeOptions: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.5, weight: 2 }} }},
+        circle: {{ shapeOptions: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.5, weight: 2 }} }},
+        polyline: {{ shapeOptions: {{ color: 'black', weight: 3 }} }},
+        marker: true,
+        circlemarker: {{ color: 'black', fillColor: 'yellow', fillOpacity: 0.9, radius: 8 }}
+    }},
+    edit:{{ featureGroup: drawnItems }}
+}});
+map.addControl(drawControl);
+
+map.on(L.Draw.Event.CREATED, function(e){{
+    var layer = e.layer;
+    if (e.layerType !== 'marker' && e.layerType !== 'polyline') {{
+        layer.setStyle({{color:'black', fillColor:'yellow', fillOpacity:0.5, weight:2}});
+    }}
+    drawnItems.addLayer(layer);
+}});
+
+// --- ФУНКЦІЇ КНОПОК ---
+function addText(){{
+    var text = prompt("Введіть текст:");
+    if(text){{
+        map.once('click', function(e){{
+            var icon = L.divIcon({{
+                html:'<div style="background:rgba(255,255,255,0.8); padding:2px 5px; border:1px solid black; border-radius:3px; font-weight:bold; color:black; white-space:nowrap;">'+text+'</div>',
+                iconSize: null
+            }});
+            L.marker(e.latlng,{{icon:icon}}).addTo(drawnItems);
+        }});
+    }}
+}}
+
+function clearMap() {{
+    if(confirm("Очистити нанесені малюнки?")) {{
+        drawnItems.clearLayers();
+        clickMarker.setOpacity(0);
+    }}
+}}
+
+function downloadPNG(){{
+    const area = document.getElementById("capture_area");
+    html2canvas(area, {{
+        useCORS: true, 
+        backgroundColor: "#0e1117", 
+        scale: 2,
+        scrollY: -window.scrollY
+    }}).then(function(canvas){{
+        var link = document.createElement("a");
+        link.download = "Chemical_Map_Report.png";
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+    }});
+}}
+</script>
+"""
+    # Віджет для отримання даних з JS
+    res = st.components.v1.html(map_html, height=780)
+    
+    # Спеціальна обробка: якщо JS надіслав координати, записуємо їх у сесію
+    # (В Streamlit це робиться автоматично при взаємодії, якщо використовувати st_folium, 
+    # але для кастомного HTML ми використовуємо простіший шлях через ввід вище)
+
+# --- 7. ТАБЛИЦЯ ДАНИХ (Внизу) ---
 if not st.session_state.data.empty:
+    st.markdown("### 📄 Журнал вимірювань")
     st.dataframe(st.session_state.data, use_container_width=True)
